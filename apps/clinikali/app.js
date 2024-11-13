@@ -22,6 +22,8 @@ function loadAppSettings() {
   if (settingsChanged) {
     require("Storage").writeJSON("clinikali.json", appSettings);
   }
+
+  return appSettings;
 }
 
 loadAppSettings();
@@ -148,7 +150,7 @@ function viewFile(filename) {
   E.showMenu({
     "": { title: `File ${extractFileNumber(filename)}` },
     "Send Data": () => {
-      E.showMessage("Preparing...");
+      E.showMessage("Preparing to send...");
 
       function sendFileData() {
         const cleanFilename = filename.replace(" (StorageFile)", "");
@@ -160,40 +162,48 @@ function viewFile(filename) {
           return;
         }
 
-        // Basic BLE optimization
+        // Read entire file at once
+        let content = file.read();
+        const totalSize = content.length;
+
+        // Optimize BLE connection more aggressively
         NRF.setConnectionInterval(7.5);
+        NRF.setTxPower(4);
 
         E.showMessage("Sending data...");
-        let line;
-        let lineCount = 0;
 
-        // Simple line-by-line sending with fewer markers
-        function sendNextLine() {
-          line = file.readLine();
+        // Increased chunk size for faster transfer
+        const CHUNK_SIZE = 768; // Try larger chunks
+        let position = 0;
+        let lastProgressUpdate = 0;
 
-          if (line === undefined) {
+        function sendChunk() {
+          if (position >= totalSize) {
             Bluetooth.println("END");
             E.showMessage("Data sent!");
             setTimeout(() => viewFile(filename), 2000);
             return;
           }
 
-          if (line.trim()) {
-            Bluetooth.println(line);
-            lineCount++;
-
-            // Show progress every 100 lines
-            if (lineCount % 100 === 0) {
-              E.showMessage(`Lines sent: ${lineCount}`);
-            }
+          // Update progress less frequently (every 5%)
+          const progress = Math.floor((position / totalSize) * 100);
+          if (progress >= lastProgressUpdate + 5) {
+            E.showMessage(`Sending: ${progress}%`);
+            lastProgressUpdate = progress;
           }
 
-          setTimeout(sendNextLine, 20);
+          // Send chunk
+          const chunk = content.slice(position, position + CHUNK_SIZE);
+          Bluetooth.write(chunk);
+
+          position += CHUNK_SIZE;
+          // Reduced delay between chunks
+          setTimeout(sendChunk, 5);
         }
 
-        // Start sending without size calculation
-        Bluetooth.println("START");
-        sendNextLine();
+        // Start transfer
+        Bluetooth.println("START:" + totalSize);
+        sendChunk();
       }
 
       sendFileData();
