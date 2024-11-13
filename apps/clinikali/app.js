@@ -160,52 +160,40 @@ function viewFile(filename) {
           return;
         }
 
-        // Optimize BLE settings more aggressively
+        // Basic BLE optimization
         NRF.setConnectionInterval(7.5);
-        NRF.setTxPower(4);
 
-        const CHUNK_SIZE = 768; // Increased chunk size
-        let bytesSent = 0;
-        let lastProgress = 0;
+        E.showMessage("Sending data...");
+        let line;
+        let lineCount = 0;
 
-        function sendNextChunk() {
-          let chunk = "";
-          let bytesRead = 0;
+        // Simple line-by-line sending with fewer markers
+        function sendNextLine() {
+          line = file.readLine();
 
-          // Read larger chunks
-          while (bytesRead < CHUNK_SIZE) {
-            const line = file.readLine();
-            if (line === undefined) {
-              if (chunk.length > 0) {
-                Bluetooth.write(chunk);
-              }
-              Bluetooth.println("END");
-              E.showMessage("Data sent!");
-              setTimeout(() => viewFile(filename), 2000);
-              return;
+          if (line === undefined) {
+            Bluetooth.println("END");
+            E.showMessage("Data sent!");
+            setTimeout(() => viewFile(filename), 2000);
+            return;
+          }
+
+          if (line.trim()) {
+            Bluetooth.println(line);
+            lineCount++;
+
+            // Show progress every 100 lines
+            if (lineCount % 100 === 0) {
+              E.showMessage(`Lines sent: ${lineCount}`);
             }
-            chunk += line + "\n";
-            bytesRead += line.length + 1;
           }
 
-          // Send chunk
-          Bluetooth.write(chunk);
-          bytesSent += bytesRead;
-
-          // Update progress only every 5%
-          const progress = Math.floor((bytesSent / 4194304) * 100); // 4MB = 4194304 bytes
-          if (progress >= lastProgress + 5) {
-            lastProgress = progress;
-            E.showMessage(`Sending: ${progress}%`);
-          }
-
-          // Minimize delay between chunks
-          setTimeout(sendNextChunk, 5);
+          setTimeout(sendNextLine, 20);
         }
 
-        // Start sending immediately
-        Bluetooth.println("START:4194304");
-        sendNextChunk();
+        // Start sending without size calculation
+        Bluetooth.println("START");
+        sendNextLine();
       }
 
       sendFileData();
