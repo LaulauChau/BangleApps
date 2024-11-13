@@ -148,11 +148,11 @@ function viewFile(filename) {
 	E.showMenu({
 		"": { title: `File ${extractFileNumber(filename)}` },
 		"Send Data": () => {
-			E.showMessage("Preparing to send...");
+			E.showMessage("Preparing...");
 
 			function sendFileData() {
 				const cleanFilename = filename.replace(" (StorageFile)", "");
-				const file = require("Storage").open(cleanFilename, "r");
+				let file = require("Storage").open(cleanFilename, "r");
 
 				if (!file) {
 					E.showMessage("File not found!");
@@ -160,44 +160,61 @@ function viewFile(filename) {
 					return;
 				}
 
-				// Read entire file at once
-				const content = file.read();
-				const totalSize = content.length;
-
 				// Optimize BLE connection
-				NRF.setConnectionInterval(7.5); // Minimum interval
-				NRF.setTxPower(4); // Maximum power
+				NRF.setConnectionInterval(7.5);
+				NRF.setTxPower(4);
 
-				E.showMessage("Sending data...");
-
-				// Send in larger chunks
-				const CHUNK_SIZE = 512; // Increased chunk size
-				let position = 0;
-
-				function sendChunk() {
-					if (position >= totalSize) {
-						Bluetooth.println("END");
-						E.showMessage("Data sent!");
-						setTimeout(() => viewFile(filename), 2000);
-						return;
-					}
-
-					// Calculate progress percentage
-					const progress = Math.floor((position / totalSize) * 100);
-					E.showMessage(`Sending: ${progress}%`);
-
-					// Send chunk directly without markers
-					const chunk = content.slice(position, position + CHUNK_SIZE);
-					Bluetooth.write(chunk);
-
-					position += CHUNK_SIZE;
-					// Schedule next chunk with minimal delay
-					setTimeout(sendChunk, 10);
+				// Get file size by reading lines
+				let fileSize = 0;
+				let line;
+				while ((line = file.readLine()) !== undefined) {
+					fileSize += line.length + 1; // +1 for newline
 				}
 
-				// Start transfer with file size header
-				Bluetooth.println("START:" + totalSize);
-				sendChunk();
+				// Send file size header
+				Bluetooth.println("START:" + fileSize);
+
+				// Reset file for reading
+				file = require("Storage").open(cleanFilename, "r");
+
+				E.showMessage("Sending data...");
+				let bytesSent = 0;
+
+				function sendNextLines() {
+					let chunk = "";
+					let bytesInChunk = 0;
+					const CHUNK_SIZE = 512;
+
+					// Build chunk from lines
+					while (bytesInChunk < CHUNK_SIZE) {
+						line = file.readLine();
+						if (line === undefined) {
+							if (chunk.length > 0) {
+								Bluetooth.write(chunk);
+							}
+							Bluetooth.println("END");
+							E.showMessage("Data sent!");
+							setTimeout(() => viewFile(filename), 2000);
+							return;
+						}
+						chunk += line + "\n";
+						bytesInChunk += line.length + 1;
+					}
+
+					// Send chunk
+					Bluetooth.write(chunk);
+					bytesSent += bytesInChunk;
+
+					// Show progress
+					const progress = Math.floor((bytesSent / fileSize) * 100);
+					E.showMessage(`Sending: ${progress}%`);
+
+					// Schedule next chunk
+					setTimeout(sendNextLines, 10);
+				}
+
+				// Start sending
+				sendNextLines();
 			}
 
 			sendFileData();
