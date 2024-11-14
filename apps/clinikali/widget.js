@@ -2,7 +2,6 @@
   let storageFile; // file for recording
   let activeRecorders = [];
   let writeSetup; // the interval for writing
-  // let writeSubSecs; // true if we should write .1s for time, otherwise round to nearest second
 
   const loadAppSettings = () => {
     const appSettings = require("Storage").readJSON("clinikali.json", 1) || {};
@@ -11,6 +10,10 @@
 
     if (!appSettings.file || !appSettings.file.startsWith("clinikali.log")) {
       appSettings.recording = false;
+    }
+
+    if (!appSettings.record) {
+      appSettings.record = ["accel", "hrm", "baro"];
     }
 
     return appSettings;
@@ -27,21 +30,22 @@
   const getRecorders = () => {
     const recorders = {
       accel: () => {
-        let activityValue = "";
+        let x = "",
+          y = "",
+          z = "";
 
         function onAccel(acceleration) {
-          activityValue =
-            acceleration.x * acceleration.x +
-            acceleration.y * acceleration.y +
-            acceleration.z * acceleration.z;
+          x = acceleration.x;
+          y = acceleration.y;
+          z = acceleration.z;
         }
 
         return {
           name: "Accel",
-          fields: ["Activity"],
+          fields: ["AccelX", "AccelY", "AccelZ"],
           getValues: () => {
-            const result = [activityValue];
-            activityValue = "";
+            const result = [x, y, z];
+            (x = ""), (y = ""), (z = "");
             return result;
           },
           start: () => {
@@ -139,8 +143,8 @@
 
     // Only return recorders that are in the appSettings.record array
     return appSettings.record
-      .filter(name => recorders[name]) // Make sure recorder exists
-      .map(name => recorders[name]());
+      .filter((name) => recorders[name]) // Make sure recorder exists
+      .map((name) => recorders[name]());
   };
 
   const getCSVHeaders = (activeRecorders) =>
