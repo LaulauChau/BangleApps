@@ -3,6 +3,20 @@
   <head>
     <title>Clinikali Data Download</title>
     <link rel="stylesheet" href="../../css/spectre.min.css" />
+    <style>
+      .progress-bar {
+        width: 100%;
+        height: 20px;
+        background-color: #f5f5f5;
+        border-radius: 4px;
+        overflow: hidden;
+      }
+      .progress-bar-inner {
+        height: 100%;
+        background-color: #5755d9;
+        transition: width 0.3s ease;
+      }
+    </style>
   </head>
   <body>
     <div id="files"></div>
@@ -14,60 +28,111 @@
     <script>
       var domFiles = document.getElementById("files");
 
-      function downloadFile(filename, callback) {
-        Util.showModal(`Downloading ${filename}...`);
-        // Use readStorageFile as it's proven to work, but read in larger chunks
-        Util.readStorageFile(
-          filename,
-          (data) => {
-            Util.hideModal();
-            callback(data);
-          },
-          undefined,
-          8192,
-        ); // Increased chunk size to 8KB
+      function downloadFile(filename) {
+        return new Promise((resolve, reject) => {
+          const modal = document.createElement("div");
+          modal.innerHTML = `
+          <div class="modal-body">
+            <div>Downloading ${filename}</div>
+            <div class="progress-bar">
+              <div class="progress-bar-inner" style="width: 0%"></div>
+            </div>
+          </div>
+        `;
+          Util.showModal(modal);
+
+          // Get file size first
+          Puck.eval(
+            `require("Storage").open("${filename}","r").getLength()`,
+            (size) => {
+              if (!size) {
+                Util.hideModal();
+                reject("File not found or empty");
+                return;
+              }
+
+              const totalSize = parseInt(size);
+              let data = "";
+
+              function readChunk(position) {
+                const chunkSize = 2048; // Increased chunk size
+                Puck.eval(
+                  `(function() {
+              var f = require("Storage").open("${filename}","r");
+              f.seek(${position});
+              return f.read(${chunkSize});
+            })()`,
+                  (chunk) => {
+                    if (chunk) {
+                      data += chunk;
+                      const progress = Math.min(
+                        100,
+                        Math.round((data.length / totalSize) * 100),
+                      );
+                      modal.querySelector(".progress-bar-inner").style.width =
+                        progress + "%";
+
+                      if (data.length < totalSize) {
+                        setTimeout(() => readChunk(data.length), 50); // Added small delay between chunks
+                      } else {
+                        Util.hideModal();
+                        resolve(data);
+                      }
+                    } else {
+                      Util.hideModal();
+                      resolve(data);
+                    }
+                  },
+                );
+              }
+
+              readChunk(0);
+            },
+          );
+        });
       }
 
-      function saveCSV(data, title) {
-        // Create blob and download directly without extra processing
-        const blob = new Blob([data], { type: "text/csv" });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = title;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-        showToast("Download finished.", "success");
+      function saveCSV(data, filename) {
+        Util.saveFile(filename, "text/csv", data);
+        showToast("Download complete!", "success");
       }
 
       function getFileList() {
         Util.showModal("Loading File List...");
         domFiles.innerHTML = "";
 
+        // List all clinikali files
         Puck.eval(
           `require("Storage").list(/^clinikali\\.log.*\\.csv$/,{sf:1})`,
           (files) => {
-            var html = `
+            let html = `
         <div class="container">
           <h2>Files</h2>
           <div class="columns">`;
 
             files.forEach((filename) => {
               const fileNumber = filename.match(/^clinikali\.log(.*)\.csv$/)[1];
-              html += `
-            <div class="column col-12">
-              <div class="card">
-                <div class="card-header">
-                  <div class="card-title h5">File ${fileNumber}</div>
+
+              // Get file size
+              Puck.eval(
+                `require("Storage").open("${filename}","r").getLength()`,
+                (size) => {
+                  const fileSize = (size / 1024).toFixed(1) + " KB";
+                  html += `
+              <div class="column col-12">
+                <div class="card">
+                  <div class="card-header">
+                    <div class="card-title h5">File ${fileNumber}</div>
+                    <div class="card-subtitle text-gray">Size: ${fileSize}</div>
+                  </div>
+                  <div class="card-footer">
+                    <button class="btn btn-primary" filename="${filename}" task="download">Download CSV</button>
+                    <button class="btn btn-default" filename="${filename}" task="delete">Delete</button>
+                  </div>
                 </div>
-                <div class="card-footer">
-                  <button class="btn btn-primary" filename="${filename}" task="download">Download CSV</button>
-                  <button class="btn btn-default" filename="${filename}" task="delete">Delete</button>
-                </div>
-              </div>
-            </div>`;
+              </div>`;
+                },
+              );
             });
 
             if (files.length === 0) {
@@ -80,23 +145,25 @@
             </div>`;
             }
 
-            html += `
-          </div>
-        </div>`;
-
+            html += `</div></div>`;
             domFiles.innerHTML = html;
             Util.hideModal();
 
             var buttons = domFiles.querySelectorAll("button");
             for (var i = 0; i < buttons.length; i++) {
-              buttons[i].addEventListener("click", (event) => {
+              buttons[i].addEventListener("click", async (event) => {
                 var button = event.currentTarget;
                 var filename = button.getAttribute("filename");
                 var task = button.getAttribute("task");
 
                 switch (task) {
                   case "download":
-                    downloadFile(filename, (data) => saveCSV(data, filename));
+                    try {
+                      const data = await downloadFile(filename);
+                      saveCSV(data, filename);
+                    } catch (error) {
+                      showToast("Download failed: " + error, "error");
+                    }
                     break;
 
                   case "delete":
