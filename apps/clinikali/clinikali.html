@@ -55,7 +55,7 @@
               let data = "";
 
               function readChunk(position) {
-                const chunkSize = 2048; // Increased chunk size
+                const chunkSize = 2048;
                 Puck.eval(
                   `(function() {
               var f = require("Storage").open("${filename}","r");
@@ -73,7 +73,7 @@
                         progress + "%";
 
                       if (data.length < totalSize) {
-                        setTimeout(() => readChunk(data.length), 50); // Added small delay between chunks
+                        setTimeout(() => readChunk(data.length), 50);
                       } else {
                         Util.hideModal();
                         resolve(data);
@@ -97,28 +97,48 @@
         showToast("Download complete!", "success");
       }
 
-      function getFileList() {
+      async function getFileList() {
         Util.showModal("Loading File List...");
         domFiles.innerHTML = "";
 
-        // List all clinikali files
-        Puck.eval(
-          `require("Storage").list(/^clinikali\\.log.*\\.csv$/,{sf:1})`,
-          (files) => {
-            let html = `
+        try {
+          // Debug: Print all files in storage first
+          await new Promise((resolve) => {
+            Puck.eval(`JSON.stringify(require("Storage").list())`, (files) => {
+              console.log("All files in storage:", JSON.parse(files));
+              resolve();
+            });
+          });
+
+          // Now list our specific files
+          const files = await new Promise((resolve) => {
+            Puck.eval(
+              `JSON.stringify(require("Storage").list(/^clinikali\\.log.*\\.csv$/))`,
+              (result) => {
+                resolve(JSON.parse(result));
+              },
+            );
+          });
+
+          console.log("Found Clinikali files:", files);
+
+          let html = `
         <div class="container">
           <h2>Files</h2>
           <div class="columns">`;
 
-            files.forEach((filename) => {
+          if (files && files.length > 0) {
+            for (const filename of files) {
               const fileNumber = filename.match(/^clinikali\.log(.*)\.csv$/)[1];
+              const size = await new Promise((resolve) => {
+                Puck.eval(
+                  `require("Storage").open("${filename}","r").getLength()`,
+                  resolve,
+                );
+              });
 
-              // Get file size
-              Puck.eval(
-                `require("Storage").open("${filename}","r").getLength()`,
-                (size) => {
-                  const fileSize = (size / 1024).toFixed(1) + " KB";
-                  html += `
+              const fileSize = (size / 1024).toFixed(1) + " KB";
+              html += `
               <div class="column col-12">
                 <div class="card">
                   <div class="card-header">
@@ -131,53 +151,63 @@
                   </div>
                 </div>
               </div>`;
-                },
-              );
-            });
-
-            if (files.length === 0) {
-              html += `
+            }
+          } else {
+            html += `
             <div class="column col-12">
               <div class="card-header">
                 <div class="card-title h5">No files</div>
                 <div class="card-subtitle text-gray">No recorded data found</div>
               </div>
             </div>`;
-            }
+          }
 
-            html += `</div></div>`;
-            domFiles.innerHTML = html;
-            Util.hideModal();
+          html += `</div></div>`;
+          domFiles.innerHTML = html;
 
-            var buttons = domFiles.querySelectorAll("button");
-            for (var i = 0; i < buttons.length; i++) {
-              buttons[i].addEventListener("click", async (event) => {
-                var button = event.currentTarget;
-                var filename = button.getAttribute("filename");
-                var task = button.getAttribute("task");
+          var buttons = domFiles.querySelectorAll("button");
+          for (var i = 0; i < buttons.length; i++) {
+            buttons[i].addEventListener("click", async (event) => {
+              var button = event.currentTarget;
+              var filename = button.getAttribute("filename");
+              var task = button.getAttribute("task");
 
-                switch (task) {
-                  case "download":
-                    try {
-                      const data = await downloadFile(filename);
-                      saveCSV(data, filename);
-                    } catch (error) {
-                      showToast("Download failed: " + error, "error");
-                    }
-                    break;
+              switch (task) {
+                case "download":
+                  try {
+                    const data = await downloadFile(filename);
+                    saveCSV(data, filename);
+                  } catch (error) {
+                    showToast("Download failed: " + error, "error");
+                  }
+                  break;
 
-                  case "delete":
-                    Util.showModal(`Deleting ${filename}...`);
-                    Util.eraseStorageFile(filename, () => {
-                      Util.hideModal();
-                      getFileList();
-                    });
-                    break;
-                }
-              });
-            }
-          },
-        );
+                case "delete":
+                  Util.showModal(`Deleting ${filename}...`);
+                  Util.eraseStorageFile(filename, () => {
+                    Util.hideModal();
+                    getFileList();
+                  });
+                  break;
+              }
+            });
+          }
+        } catch (error) {
+          console.error("Error loading file list:", error);
+          domFiles.innerHTML = `
+          <div class="container">
+            <div class="columns">
+              <div class="column col-12">
+                <div class="card-header">
+                  <div class="card-title h5">Error</div>
+                  <div class="card-subtitle text-error">Failed to load file list: ${error}</div>
+                </div>
+              </div>
+            </div>
+          </div>`;
+        } finally {
+          Util.hideModal();
+        }
       }
 
       // Initialize when page loads
