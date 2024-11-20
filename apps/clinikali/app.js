@@ -138,6 +138,7 @@ function createMainMenu(settings) {
           });
         }, 1);
       },
+      value: settings.recording,
     },
     /*LANG*/ "Select Sensors": () => showSensorMenu(settings),
     /*LANG*/ "View Files": viewFiles,
@@ -263,10 +264,24 @@ function viewFiles() {
   E.showMenu(fileMenu);
 }
 
-// Initialize
-Bangle.loadWidgets();
-Bangle.drawWidgets();
-NRF.wake();
+function init() {
+  try {
+    Bangle.loadWidgets();
+    Bangle.drawWidgets();
+    NRF.wake();
 
-const initialSettings = loadAppSettings();
-showMainMenu(initialSettings);
+    const initialSettings = loadAppSettings();
+    if (WIDGETS.recorder) {
+      showMainMenu(initialSettings);
+    } else {
+      E.showMessage("Widget not found");
+      setTimeout(load, 2000);
+    }
+  } catch (error) {
+    console.log(error);
+    E.showMessage("Error loading app");
+    setTimeout(load, 2000);
+  }
+}
+
+init();

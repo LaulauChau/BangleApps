@@ -2,9 +2,9 @@
   /**
    * @typedef {Object} AppSettings
    * @property {string} file - Log file name
-   * @property {string[]} record - Active sensor names
+   * @property {number} interval - Recording interval in seconds
+   * @property {string[]} metrics - Active sensor names
    * @property {boolean} recording - Recording status
-   * @property {number} period - Recording interval in seconds
    */
 
   /**
@@ -143,7 +143,7 @@
    */
   function getActiveRecorders(settings) {
     const recorders = getRecorders();
-    return (settings.record ?? [])
+    return (settings.metrics ?? [])
       .filter((name) => recorders[name])
       .map((name) => recorders[name]());
   }
@@ -331,6 +331,7 @@
    * @param {AppSettings} settings
    */
   function reload(state, settings) {
+    // Clear previous state
     if (state.writeSetup) {
       clearInterval(state.writeSetup);
     }
@@ -343,17 +344,27 @@
       state.activeRecorders = getActiveRecorders(settings);
       state.activeRecorders.forEach((recorder) => recorder.start());
 
-      const storage = require("Storage");
-      state.storageFile = storage.list(settings.file).length
-        ? storage.open(settings.file, "a")
-        : storage
-            .open(settings.file, "w")
-            .write(getCSVHeaders(state.activeRecorders).join(",") + "\n");
+      WIDGETS.recorder.width =
+        15 + ((state.activeRecorders.length + 1) >> 1) * 12;
 
+      const storage = require("Storage");
+      if (storage.list(settings.file).length) {
+        state.storageFile = storage.open(settings.file, "a");
+      } else {
+        state.storageFile = storage.open(settings.file, "w");
+        state.storageFile.write(
+          getCSVHeaders(state.activeRecorders).join(",") + "\n",
+        );
+      }
+
+      WIDGETS.recorder.draw();
       state.writeSetup = setInterval(
         () => writeLog(state, settings),
-        settings.period * 1000,
+        settings.interval * 1000,
       );
+    } else {
+      WIDGETS.recorder.width = 0;
+      state.storageFile = undefined;
     }
   }
 
@@ -365,5 +376,6 @@
   };
 
   WIDGETS.recorder = createRecorderWidget(state);
-  reload(state, loadAppSettings());
+  const initialSettings = loadAppSettings();
+  reload(state, initialSettings);
 }
