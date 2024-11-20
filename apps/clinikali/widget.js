@@ -165,10 +165,9 @@
         state.storageFile.write(line);
       }
     } catch (error) {
-      console.log("recorder: error", error);
       settings.recording = false;
       require("Storage").write("clinikali.json", settings);
-      reload();
+      reload(state, settings);
     }
   }
 
@@ -205,7 +204,7 @@
       },
       getRecorders,
       reload: () => {
-        reload();
+        reload(state, loadAppSettings());
         Bangle.drawWidgets();
       },
       isRecording: () => !!state.writeSetup,
