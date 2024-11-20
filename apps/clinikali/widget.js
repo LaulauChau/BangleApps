@@ -27,7 +27,7 @@
   /**
    * @returns {Recorder}
    */
-  function createAccelRecorder() {
+  const createAccelRecorder = () => {
     let sensorData = { x: "", y: "", z: "" };
 
     function onAccel(accel) {
@@ -49,12 +49,12 @@
           .setColor("#00f")
           .drawImage(atob("DAwBAAH4EIHIEIHIEIHIEIEIH4AA"), x, y),
     };
-  }
+  };
 
   /**
    * @returns {Recorder}
    */
-  function createHRMRecorder() {
+  const createHRMRecorder = () => {
     let heartRate = "";
 
     function onHRM(data) {
@@ -82,12 +82,12 @@
           .setColor(Bangle.isHRMOn() ? "#f00" : "#f88")
           .drawImage(atob("DAwBAAAAMMeef+f+f+P8H4DwBgAA"), x, y),
     };
-  }
+  };
 
   /**
    * @returns {Recorder}
    */
-  function createBaroRecorder() {
+  const createBaroRecorder = () => {
     let temperature = "";
 
     function onPressure(data) {
@@ -115,12 +115,12 @@
           .setColor("#0f0")
           .drawImage(atob("DAwBAAH4EIHIEIHIEIHIEIEIH4AA"), x, y),
     };
-  }
+  };
 
   /**
    * @returns {Object.<string, () => Recorder>}
    */
-  function getRecorders() {
+  const getRecorders = () => {
     const recorders = {
       accel: createAccelRecorder,
       hrm: createHRMRecorder,
@@ -135,24 +135,24 @@
       .forEach((file) => eval(require("Storage").read(file))(recorders));
 
     return recorders;
-  }
+  };
 
   /**
    * @param {AppSettings} settings
    * @returns {Recorder[]}
    */
-  function getActiveRecorders(settings) {
+  const getActiveRecorders = (settings) => {
     const recorders = getRecorders();
     return (settings.metrics ?? [])
       .filter((name) => recorders[name])
       .map((name) => recorders[name]());
-  }
+  };
 
   /**
    * @param {RecorderState} state
    * @param {AppSettings} settings
    */
-  function writeLog(state, settings) {
+  const writeLog = (state, settings) => {
     try {
       const timestamp = new Date()
         .toISOString()
@@ -169,23 +169,23 @@
       require("Storage").write("clinikali.json", settings);
       reload(state, settings);
     }
-  }
+  };
 
   /**
    * @param {Date} date
    * @param {number} number
    * @returns {string}
    */
-  function generateFilename(date, number) {
-    const dateStr = date.toISOString().substring(0, 10).replace(/-/g, "");
+  const generateFilename = (date, number) => {
+    const dateStr = date.toISOString().substr(0, 10).replace(/-/g, "");
     return `clinikali.log${dateStr}${number.toString(36)}.csv`;
-  }
+  };
 
   /**
    * @param {RecorderState} state
    * @returns {Object} Widget configuration
    */
-  function createRecorderWidget(state) {
+  const createRecorderWidget = (state) => {
     return {
       area: "tl",
       width: 0,
@@ -221,14 +221,14 @@
         return Promise.resolve(settings.recording);
       },
     };
-  }
+  };
 
   /**
    * @param {AppSettings} settings
    * @param {Object} options
    * @returns {string} Filename
    */
-  function handleRecordingStart(settings, options) {
+  const handleRecordingStart = (settings, options) => {
     const date = new Date();
     let trackNumber = 10;
     let filename = generateFilename(date, trackNumber);
@@ -263,13 +263,13 @@
     }
 
     return filename;
-  }
+  };
 
   /**
    * @param {AppSettings} settings
    * @returns {Promise<boolean|string>}
    */
-  function handleExistingFile(settings) {
+  const handleExistingFile = (settings) => {
     return E.showPrompt(
       `Overwrite\nLog ${settings.file.match(/^clinikali\.log(.*)\.csv$/)[1]}?`,
       {
@@ -285,12 +285,12 @@
       if (selection === "cancel") return false;
       return WIDGETS.recorder.setRecording(1, { force: selection });
     });
-  }
+  };
 
   /**
    * @returns {AppSettings}
    */
-  function loadAppSettings() {
+  const loadAppSettings = () => {
     const defaultSettings = {
       file: "clinikali.log0.csv",
       interval: 1,
@@ -300,36 +300,36 @@
 
     const storedSettings =
       require("Storage").readJSON("clinikali.json", 1) ?? {};
-    const settings = { ...defaultSettings, ...storedSettings };
+    const settings = Object.assign({}, defaultSettings, storedSettings);
 
     require("Storage").write("clinikali.json", settings);
     return settings;
-  }
+  };
 
   /**
    * @param {AppSettings} settings
    */
-  function updateAppSettings(settings) {
+  const updateAppSettings = (settings) => {
     require("Storage").writeJSON("clinikali.json", settings);
 
     if (WIDGETS.recorder) {
       WIDGETS.recorder.reload();
     }
-  }
+  };
 
   /**
    * @param {Recorder[]} recorders
    * @returns {string[]}
    */
-  function getCSVHeaders(recorders) {
+  const getCSVHeaders = (recorders) => {
     return ["Time"].concat(recorders.map((recorder) => recorder.fields));
-  }
+  };
 
   /**
    * @param {RecorderState} state
    * @param {AppSettings} settings
    */
-  function reload(state, settings) {
+  const reload = (state, settings) => {
     // Clear previous state
     if (state.writeSetup) {
       clearInterval(state.writeSetup);
@@ -365,7 +365,7 @@
       WIDGETS.recorder.width = 0;
       state.storageFile = undefined;
     }
-  }
+  };
 
   // Initialize
   const state = {

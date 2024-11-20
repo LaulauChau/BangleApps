@@ -32,7 +32,7 @@ function loadAppSettings() {
   };
 
   const storedSettings = require("Storage").readJSON("clinikali.json", 1) ?? {};
-  const settings = { ...defaultSettings, ...storedSettings };
+  const settings = Object.assign({}, defaultSettings, storedSettings);
 
   require("Storage").write("clinikali.json", settings);
   return settings;
@@ -65,12 +65,11 @@ function extractFileNumber(filename) {
  * @returns {AppSettings}
  */
 function toggleSensor(name, settings) {
-  return {
-    ...settings,
-    metrics: settings.metrics.includes(name)
-      ? settings.metrics.filter((metric) => metric !== name)
-      : [...settings.metrics, name],
-  };
+  const newSettings = Object.assign({}, settings);
+  newSettings.metrics = settings.metrics.includes(name)
+    ? settings.metrics.filter((metric) => metric !== name)
+    : settings.metrics.concat([name]);
+  return newSettings;
 }
 
 /**
@@ -78,12 +77,11 @@ function toggleSensor(name, settings) {
  * @returns {Object}
  */
 function createSensorMenu(settings) {
-  return {
+  const menu = {
     "": { title: /*LANG*/ "Sensors" },
     /*LANG*/ Accelerometer: {
       onchange: () => {
         const newSettings = toggleSensor("accel", settings);
-
         updateAppSettings(newSettings);
         showSensorMenu(newSettings);
       },
@@ -92,25 +90,27 @@ function createSensorMenu(settings) {
     /*LANG*/ "Heart Rate": {
       onchange: () => {
         const newSettings = toggleSensor("hrm", settings);
-
         updateAppSettings(newSettings);
         showSensorMenu(newSettings);
       },
       value: settings.metrics.includes("hrm"),
     },
-    ...(Bangle.getPressure && {
-      /*LANG*/ Temperature: {
-        onchange: () => {
-          const newSettings = toggleSensor("baro", settings);
-
-          updateAppSettings(newSettings);
-          showSensorMenu(newSettings);
-        },
-        value: settings.metrics.includes("baro"),
-      },
-    }),
-    "< Back": () => showMainMenu(settings),
   };
+
+  if (Bangle.getPressure) {
+    menu[/*LANG*/ "Temperature"] = {
+      onchange: () => {
+        const newSettings = toggleSensor("baro", settings);
+        updateAppSettings(newSettings);
+        showSensorMenu(newSettings);
+      },
+      value: settings.metrics.includes("baro"),
+    };
+  }
+
+  menu["< Back"] = () => showMainMenu(settings);
+
+  return menu;
 }
 
 /**
@@ -149,11 +149,10 @@ function createMainMenu(settings) {
     /*LANG*/ "Set Interval": {
       format: (value) => `${value}s`,
       onchange: (newValue) => {
-        const newSettings = {
-          ...settings,
+        const newSettings = Object.assign({}, settings, {
           interval: newValue,
           recording: false,
-        };
+        });
 
         updateAppSettings(newSettings);
       },
@@ -253,17 +252,17 @@ function viewFiles() {
     .list(/^clinikali\.log(.*)\.csv$/, { sf: true })
     .reverse();
 
-  const fileMenu = {
-    "": { title: /*LANG*/ "Files" },
-    ...(files.length === 0 && { /*LANG*/ "No files": () => {} }),
-    ...Object.fromEntries(
-      files.map((filename) => [
-        extractFileNumber(filename),
-        () => viewFile(filename),
-      ]),
-    ),
-    "< Back": () => showMainMenu(loadAppSettings()),
-  };
+  const fileMenu = { "": { title: /*LANG*/ "Files" } };
+
+  if (files.length === 0) {
+    fileMenu[/*LANG*/ "No files"] = () => {};
+  } else {
+    files.forEach((filename) => {
+      fileMenu[extractFileNumber(filename)] = () => viewFile(filename);
+    });
+  }
+
+  fileMenu["< Back"] = () => showMainMenu(loadAppSettings());
 
   E.showMenu(fileMenu);
 }
