@@ -1,3 +1,7 @@
+Bangle.loadWidgets();
+Bangle.drawWidgets();
+NRF.wake();
+
 /**
  * @typedef {Object} AppSettings
  * @property {string} file - Log file name
@@ -266,12 +270,6 @@ function viewFiles() {
 
 function init() {
   try {
-    console.log("Loading app...");
-
-    Bangle.loadWidgets();
-    Bangle.drawWidgets();
-    NRF.wake();
-
     console.log("Loading settings...");
     const initialSettings = loadAppSettings();
     console.log("Settings loaded:", initialSettings);
