@@ -266,20 +266,28 @@ function viewFiles() {
 
 function init() {
   try {
+    console.log("Loading app...");
+
+    // Check if recorder widget exists first
+    if (!WIDGETS || !WIDGETS.recorder) {
+      console.log("Recorder widget not found");
+      E.showMessage("Recorder widget missing");
+      setTimeout(load, 2000);
+      return;
+    }
+
     Bangle.loadWidgets();
     Bangle.drawWidgets();
     NRF.wake();
 
+    console.log("Loading settings...");
     const initialSettings = loadAppSettings();
-    if (WIDGETS.recorder) {
-      showMainMenu(initialSettings);
-    } else {
-      E.showMessage("Widget not found");
-      setTimeout(load, 2000);
-    }
+    console.log("Settings loaded:", initialSettings);
+
+    showMainMenu(initialSettings);
   } catch (error) {
-    console.log(error);
-    E.showMessage("Error loading app");
+    console.log("Error:", error.toString());
+    E.showMessage("Error: " + error.toString());
     setTimeout(load, 2000);
   }
 }
