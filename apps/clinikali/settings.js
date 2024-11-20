@@ -1,4 +1,3 @@
-(back) => {
-  // just go right to our app - we need all the memory
+(_) => {
   load("clinikali.app.js");
 };
