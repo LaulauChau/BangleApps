@@ -177,7 +177,7 @@
    * @returns {string}
    */
   function generateFilename(date, number) {
-    const dateStr = date.toISOString().substr(0, 10).replace(/-/g, "");
+    const dateStr = date.toISOString().substring(0, 10).replace(/-/g, "");
     return `clinikali.log${dateStr}${number.toString(36)}.csv`;
   }
 
