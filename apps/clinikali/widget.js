@@ -6,7 +6,7 @@
   const loadAppSettings = () => {
     const appSettings = require("Storage").readJSON("clinikali.json", 1) || {};
 
-    appSettings.period = appSettings.period || 10;
+    appSettings.period = appSettings.period || 1;
 
     if (!appSettings.file || !appSettings.file.startsWith("clinikali.log")) {
       appSettings.recording = false;
@@ -203,12 +203,7 @@
       }
 
       WIDGETS.recorder.draw();
-      // writeSubSecs = appSettings.period === 1;
-      writeSetup = setInterval(
-        writeLog,
-        appSettings.period * 1000,
-        appSettings.period,
-      );
+      writeSetup = setInterval(writeLog, Math.floor(1000 / appSettings.period));
     } else {
       WIDGETS.recorder.width = 0;
       storageFile = undefined;

@@ -130,11 +130,11 @@ function showMainMenu() {
       showSensorMenu();
     },
     "Time Period": {
-      value: appSettings.period || 10,
+      value: appSettings.period || 1,
       min: 1,
       max: 120,
       step: 1,
-      format: (value) => `${value}s`,
+      format: (value) => `${value} Hz`,
       onchange: (newValue) => {
         appSettings.recording = false; // stop recording if we change anything
         appSettings.period = newValue;
