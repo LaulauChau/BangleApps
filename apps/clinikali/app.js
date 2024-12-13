@@ -4,10 +4,17 @@ Bangle.drawWidgets();
 // Enable Bluetooth Low Energy
 NRF.wake();
 
-// Request pairing
-NRF.security = { passkey: "123456", mitm: 1, display: 1 };
-
 let appSettings;
+
+function logAction(message) {
+  const logFile = "clinikali.log.txt";
+  const timestamp = new Date().toISOString();
+  const logEntry = `[${timestamp}] ${message}\n`;
+
+  // Append to log file
+  const file = require("Storage").open(logFile, "a");
+  file.write(logEntry);
+}
 
 function loadAppSettings() {
   appSettings = require("Storage").readJSON("clinikali.json", 1) || {};
@@ -58,9 +65,11 @@ function toggleRecorder(name) {
   if (index === -1) {
     // Add recorder
     appSettings.record.push(name);
+    logAction(`Sensor ${name} enabled`);
   } else {
     // Remove recorder
     appSettings.record.splice(index, 1);
+    logAction(`Sensor ${name} disabled`);
   }
 
   updateAppSettings(appSettings);
@@ -105,11 +114,11 @@ function showSensorMenu() {
 
 function showMainMenu() {
   const mainMenu = {
-    "": { title: "Recorder" },
+    "": { title: "Clinikali" },
     "< Back": () => {
       load();
     },
-    RECORD: {
+    Record: {
       value: !!appSettings.recording,
       onchange: (newValue) => {
         setTimeout(() => {
@@ -117,12 +126,12 @@ function showMainMenu() {
 
           WIDGETS.recorder.setRecording(newValue).then(() => {
             loadAppSettings();
+            logAction(`Recording ${newValue ? "started" : "stopped"}`);
             showMainMenu();
           });
         }, 1);
       },
     },
-    File: { value: extractFileNumber(appSettings.file) },
     "View Files": () => {
       viewFiles();
     },
@@ -138,6 +147,7 @@ function showMainMenu() {
       onchange: (newValue) => {
         appSettings.recording = false; // stop recording if we change anything
         appSettings.period = newValue;
+        logAction(`Sampling period changed to ${newValue}Hz`);
         updateAppSettings();
       },
     },
@@ -212,6 +222,7 @@ function viewFile(filename) {
       E.showPrompt("Delete File?").then((shouldDelete) => {
         if (shouldDelete) {
           require("Storage").erase(filename);
+          logAction(`Deleted file: ${filename}`);
           viewFiles();
         } else {
           viewFile(filename);
