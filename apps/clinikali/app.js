@@ -21,16 +21,20 @@ function loadAppSettings() {
 
   let settingsChanged = false;
 
-  if (!appSettings.file) {
+  if (!appSettings.pid) {
     settingsChanged = true;
-    appSettings.file = "clinikali.log0.csv";
+    appSettings.pid = "05"; // Default PID - you can change this to whatever you want
+  }
+
+  // Remove the old file setting since we'll generate it dynamically now
+  if (appSettings.file) {
+    delete appSettings.file;
+    settingsChanged = true;
   }
 
   if (settingsChanged) {
     require("Storage").writeJSON("clinikali.json", appSettings);
   }
-
-  return appSettings;
 }
 
 loadAppSettings();
@@ -43,14 +47,40 @@ function updateAppSettings() {
   }
 }
 
-function extractFileNumber(filename) {
-  const matches = filename.match(/^clinikali\.log(.*)\.csv$/);
+function generateFilename() {
+  const date = new Date();
+  const dateStr = date.toISOString().slice(0, 10); // Gets YYYY-MM-DD
+  const baseFilename = `${appSettings.pid}_${dateStr}`;
 
-  if (matches) {
-    return matches[1];
+  // Check existing files with same base name
+  const files = require("Storage").list(
+    new RegExp(`^${baseFilename}_[a-z]\\.csv$`),
+  );
+
+  if (files.length === 0) {
+    return `${baseFilename}_a.csv`;
   }
 
-  return 0;
+  // Find the last letter used
+  const lastFile = files.sort().pop();
+  const lastLetter = lastFile.charAt(lastFile.length - 5);
+  const nextLetter = String.fromCharCode(lastLetter.charCodeAt(0) + 1);
+
+  return `${baseFilename}_${nextLetter}.csv`;
+}
+
+function extractFileNumber(filename) {
+  if (!filename) {
+    return "";
+  }
+
+  const parts = filename.split("_");
+
+  if (parts.length >= 3) {
+    return `${parts[0]} ${parts[1]} ${parts[2].charAt(0)}`; // Returns "PID DATE LETTER"
+  }
+
+  return filename;
 }
 
 function toggleRecorder(name) {
@@ -123,6 +153,13 @@ function showMainMenu() {
       onchange: (newValue) => {
         setTimeout(() => {
           E.showMenu();
+
+          if (newValue) {
+            // Generate new filename when starting recording
+            const newFilename = generateFilename();
+            logAction(`Created new file: ${newFilename}`);
+            // You'll need to pass this filename to your recorder widget
+          }
 
           WIDGETS.recorder.setRecording(newValue).then(() => {
             loadAppSettings();
