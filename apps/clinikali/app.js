@@ -196,65 +196,6 @@ function showMainMenu() {
 function viewFile(filename) {
   E.showMenu({
     "": { title: `File ${extractFileNumber(filename)}` },
-    "Send Data": () => {
-      E.showMessage("Preparing to send...");
-
-      function sendFileData() {
-        const cleanFilename = filename.replace(" (StorageFile)", "");
-        let file = require("Storage").open(cleanFilename, "r");
-
-        if (!file) {
-          E.showMessage("File not found!");
-          setTimeout(() => viewFile(filename), 2000);
-          return;
-        }
-
-        // Read entire file at once
-        let content = file.read();
-        const totalSize = content.length;
-
-        // Optimize BLE connection more aggressively
-        NRF.setConnectionInterval(7.5);
-        NRF.setTxPower(4);
-
-        E.showMessage("Sending data...");
-
-        // Increased chunk size for faster transfer
-        const CHUNK_SIZE = 768; // Try larger chunks
-        let position = 0;
-        let lastProgressUpdate = 0;
-
-        function sendChunk() {
-          if (position >= totalSize) {
-            Bluetooth.println("END");
-            E.showMessage("Data sent!");
-            setTimeout(() => viewFile(filename), 2000);
-            return;
-          }
-
-          // Update progress less frequently (every 5%)
-          const progress = Math.floor((position / totalSize) * 100);
-          if (progress >= lastProgressUpdate + 5) {
-            E.showMessage(`Sending: ${progress}%`);
-            lastProgressUpdate = progress;
-          }
-
-          // Send chunk
-          const chunk = content.slice(position, position + CHUNK_SIZE);
-          Bluetooth.write(chunk);
-
-          position += CHUNK_SIZE;
-          // Reduced delay between chunks
-          setTimeout(sendChunk, 5);
-        }
-
-        // Start transfer
-        Bluetooth.println("START:" + totalSize);
-        sendChunk();
-      }
-
-      sendFileData();
-    },
     Delete: () => {
       E.showPrompt("Delete File?").then((shouldDelete) => {
         if (shouldDelete) {
