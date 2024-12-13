@@ -242,19 +242,16 @@
       options = options || {};
 
       if (isOn && !appSettings.recording) {
-        const currentDate = new Date()
-          .toISOString()
-          .substr(0, 10)
-          .replace(/-/g, "");
-        let trackNumber = 10;
+        const currentDate = new Date().toISOString().slice(0, 10); // YYYY-MM-DD format
+        let letterIndex = "a";
 
         function generateTrackFilename() {
-          return `clinikali.log${currentDate}${trackNumber.toString(36)}.csv`;
+          return `${appSettings.pid}_${currentDate}_${letterIndex}.csv`;
         }
 
         if (
           !appSettings.file ||
-          !appSettings.file.startsWith(`clinikali.log${currentDate}`)
+          !appSettings.file.startsWith(`${appSettings.pid}_${currentDate}`)
         ) {
           appSettings.file = generateTrackFilename();
         }
@@ -274,9 +271,9 @@
           if (!options.force) {
             g.reset();
             return E.showPrompt(
-              `Overwrite\nLog ${
-                appSettings.file.match(/^clinikali\.log(.*)\.csv$/)[1]
-              }?`,
+              `Overwrite\nLog ${appSettings.file
+                .split("_")[2]
+                .replace(".csv", "")}?`, // Show just the letter
               {
                 title: "Recorder",
                 buttons: {
@@ -287,18 +284,13 @@
                 },
               },
             ).then((selection) => {
-              if (selection === "cancel") {
-                return false;
-              }
-              if (selection === "overwrite") {
+              if (selection === "cancel") return false;
+              if (selection === "overwrite")
                 return WIDGETS.recorder.setRecording(1, { force: "overwrite" });
-              }
-              if (selection === "new") {
+              if (selection === "new")
                 return WIDGETS.recorder.setRecording(1, { force: "new" });
-              }
-              if (selection === "append") {
+              if (selection === "append")
                 return WIDGETS.recorder.setRecording(1, { force: "append" });
-              }
               throw new Error("Unknown response!");
             });
           }
@@ -309,10 +301,9 @@
             require("Storage").open(appSettings.file, "r").erase();
           } else if (options.force === "new") {
             let newFileName;
-
             do {
               newFileName = generateTrackFilename();
-              trackNumber++;
+              letterIndex = String.fromCharCode(letterIndex.charCodeAt(0) + 1);
             } while (require("Storage").list(newFileName).length);
 
             appSettings.file = newFileName;
