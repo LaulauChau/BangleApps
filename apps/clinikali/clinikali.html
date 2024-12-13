@@ -14,17 +14,32 @@
     <script>
       var domFiles = document.getElementById("files");
 
+      function logToWatch(message) {
+        const logCommand = `
+          (function() {
+            const logFile = "clinikali.log.txt";
+            const timestamp = new Date().toISOString();
+            const logEntry = \`\${timestamp}: \${message}\\n\`;
+            const file = require("Storage").open(logFile, "a");
+            file.write(logEntry);
+          })()
+        `;
+        Puck.eval(logCommand);
+      }
+
       function downloadFile(filename, callback) {
         Util.showModal(`Downloading ${filename}...`);
         Util.readStorageFile(filename, (data) => {
           Util.hideModal();
+          logToWatch(`File downloaded via interface: ${filename}`);
           callback(data);
         });
       }
 
       function saveCSV(data, title) {
-        Util.saveFile(title + ".csv", "text/csv", data);
+        Util.saveFile(title, "text/csv", data);
         showToast("Download finished.", "success");
+        logToWatch(`File saved to computer: ${title}`);
       }
 
       function getFileList() {
@@ -36,42 +51,43 @@
           `require("Storage").list(/^clinikali\\.log.*\\.csv$/,{sf:1})`,
           (files) => {
             var html = `
-        <div class="container">
-          <h2>Files</h2>
-          <div class="columns">`;
+            <div class="container">
+              <h2>Files</h2>
+              <div class="columns">`;
 
             files.forEach((filename) => {
               const fileNumber = filename.match(/^clinikali\.log(.*)\.csv$/)[1];
               html += `
-            <div class="column col-12">
-              <div class="card">
-                <div class="card-header">
-                  <div class="card-title h5">File ${fileNumber}</div>
-                </div>
-                <div class="card-footer">
-                  <button class="btn btn-primary" filename="${filename}" task="download">Download CSV</button>
-                  <button class="btn btn-default" filename="${filename}" task="delete">Delete</button>
-                </div>
-              </div>
-            </div>`;
+                <div class="column col-12">
+                  <div class="card">
+                    <div class="card-header">
+                      <div class="card-title h5">File ${fileNumber}</div>
+                    </div>
+                    <div class="card-footer">
+                      <button class="btn btn-primary" filename="${filename}" task="download">Download CSV</button>
+                      <button class="btn btn-default" filename="${filename}" task="delete">Delete</button>
+                    </div>
+                  </div>
+                </div>`;
             });
 
             if (files.length === 0) {
               html += `
-            <div class="column col-12">
-              <div class="card-header">
-                <div class="card-title h5">No files</div>
-                <div class="card-subtitle text-gray">No recorded data found</div>
-              </div>
-            </div>`;
+                <div class="column col-12">
+                  <div class="card-header">
+                    <div class="card-title h5">No files</div>
+                    <div class="card-subtitle text-gray">No recorded data found</div>
+                  </div>
+                </div>`;
             }
 
             html += `
-          </div>
-        </div>`;
+              </div>
+            </div>`;
 
             domFiles.innerHTML = html;
             Util.hideModal();
+            logToWatch("File list accessed via interface");
 
             // Add button handlers
             var buttons = domFiles.querySelectorAll("button");
@@ -90,6 +106,7 @@
                     Util.showModal(`Deleting ${filename}...`);
                     Util.eraseStorageFile(filename, () => {
                       Util.hideModal();
+                      logToWatch(`File deleted via interface: ${filename}`);
                       getFileList();
                     });
                     break;
