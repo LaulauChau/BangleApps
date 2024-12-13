@@ -23,7 +23,7 @@ function loadAppSettings() {
   // Initialize PID if not set
   if (!appSettings.pid) {
     settingsChanged = true;
-    appSettings.pid = "P001"; // Default PID
+    appSettings.pid = "05"; // Default PID
   }
 
   // Initialize record array if not set
@@ -166,6 +166,8 @@ function showMainMenu() {
           if (newValue) {
             // Generate new filename when starting recording
             const newFilename = generateFilename();
+            appSettings.file = newFilename;
+            updateAppSettings();
             logAction(`Created new file: ${newFilename}`);
             // You'll need to pass this filename to your recorder widget
           }
@@ -230,7 +232,7 @@ function viewFiles() {
   let filesFound = false;
 
   require("Storage")
-    .list(/^clinikali\.log.*\.csv$/, { sf: true })
+    .list(/^P\d{3}_\d{4}-\d{2}-\d{2}_[a-z]\.csv$/, { sf: true }) // Changed pattern
     .reverse()
     .forEach((filename) => {
       filesFound = true;
