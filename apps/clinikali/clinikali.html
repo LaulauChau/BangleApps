@@ -46,9 +46,9 @@
         Util.showModal("Loading File List...");
         domFiles.innerHTML = "";
 
-        // List all clinikali files
+        // List all files with the new PID-based format
         Puck.eval(
-          `require("Storage").list(/^clinikali\\.log.*\\.csv$/,{sf:1})`,
+          `require("Storage").list(/^P\\d{3}_\\d{4}-\\d{2}-\\d{2}_[a-z]\\.csv$/,{sf:1})`,
           (files) => {
             var html = `
             <div class="container">
@@ -56,12 +56,15 @@
               <div class="columns">`;
 
             files.forEach((filename) => {
-              const fileNumber = filename.match(/^clinikali\.log(.*)\.csv$/)[1];
+              // Split filename into parts: PID, date, and letter
+              const parts = filename.split('_');
+              const displayName = `${parts[0]} ${parts[1]} ${parts[2].charAt(0)}`;
+              
               html += `
                 <div class="column col-12">
                   <div class="card">
                     <div class="card-header">
-                      <div class="card-title h5">File ${fileNumber}</div>
+                      <div class="card-title h5">File ${displayName}</div>
                     </div>
                     <div class="card-footer">
                       <button class="btn btn-primary" filename="${filename}" task="download">Download CSV</button>
