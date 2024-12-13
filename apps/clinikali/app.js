@@ -18,23 +18,37 @@ function logAction(message) {
 
 function loadAppSettings() {
   appSettings = require("Storage").readJSON("clinikali.json", 1) || {};
-
   let settingsChanged = false;
 
+  // Initialize PID if not set
   if (!appSettings.pid) {
     settingsChanged = true;
-    appSettings.pid = "05"; // Default PID - you can change this to whatever you want
+    appSettings.pid = "P001"; // Default PID
   }
 
-  // Remove the old file setting since we'll generate it dynamically now
-  if (appSettings.file) {
-    delete appSettings.file;
+  // Initialize record array if not set
+  if (!appSettings.record) {
     settingsChanged = true;
+    appSettings.record = ["accel", "hrm", "baro"];
+  }
+
+  // Initialize period if not set
+  if (!appSettings.period) {
+    settingsChanged = true;
+    appSettings.period = 1;
+  }
+
+  // Initialize recording status if not set
+  if (typeof appSettings.recording === "undefined") {
+    settingsChanged = true;
+    appSettings.recording = false;
   }
 
   if (settingsChanged) {
     require("Storage").writeJSON("clinikali.json", appSettings);
   }
+
+  return appSettings;
 }
 
 loadAppSettings();
@@ -84,14 +98,9 @@ function extractFileNumber(filename) {
 }
 
 function toggleRecorder(name) {
-  const appSettings = loadAppSettings();
-
-  // Initialize record array if it doesn't exist
-  if (!appSettings.record) {
-    appSettings.record = ["accel", "hrm", "baro"];
-  }
-
+  // No need to load settings again as we already have them in appSettings
   const index = appSettings.record.indexOf(name);
+
   if (index === -1) {
     // Add recorder
     appSettings.record.push(name);
@@ -102,7 +111,7 @@ function toggleRecorder(name) {
     logAction(`Sensor ${name} disabled`);
   }
 
-  updateAppSettings(appSettings);
+  updateAppSettings();
   showSensorMenu();
 }
 
