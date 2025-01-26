@@ -9,7 +9,7 @@
       "GBiBAAAAAAAAAAAAAAAAAAHDgAPnwAPjwAPnwAPnwAPnwAPnwAPnwAPnwAPnwAPnwAPnwAPnwAPjwAPnwAHDgAAAAAAAAAAAAAAAAA==",
     );
 
-  return {
+  const info = {
     name: "Bangle",
     items: require("Storage").readJSON("clinikali.json")
       ? [
@@ -44,4 +44,7 @@
         ]
       : [],
   };
-});
+
+  // Return the info object
+  return info;
+})();
