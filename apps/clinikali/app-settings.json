@@ -1,0 +1,7 @@
+{
+  "localeOffset": 1,
+  "period": 1,
+  "pid": "05",
+  "recording": false,
+  "record": ["accel", "hrm", "baro"]
+}
