@@ -4,20 +4,20 @@ Bangle.drawWidgets();
 // Enable Bluetooth Low Energy
 NRF.wake();
 
-const SERVICE_UUID = "1234567890-1234-1234-1234-567890123456";
-const FILE_CHAR_UUID = "1234567890-1234-1234-1234-567890123457";
-const CONTROL_CHAR_UUID = "1234567890-1234-1234-1234-567890123458";
+// const SERVICE_UUID = "1234567890-1234-1234-1234-567890123456";
+// const FILE_CHAR_UUID = "1234567890-1234-1234-1234-567890123457";
+// const CONTROL_CHAR_UUID = "1234567890-1234-1234-1234-567890123458";
 
 // Setup services
 NRF.setServices(
   {
-    [SERVICE_UUID]: {
-      [FILE_CHAR_UUID]: {
+    "1234567890-1234-1234-1234-567890123456": {
+      "1234567890-1234-1234-1234-567890123457": {
         readable: true,
         notify: true,
         value: [], // Empty array by default
       },
-      [CONTROL_CHAR_UUID]: {
+      "1234567890-1234-1234-1234-567890123458": {
         readable: true,
         writable: true,
         value: [0],
@@ -197,8 +197,8 @@ function sendCSVFile(filename) {
     if (currentChunk >= chunks.length) {
       clearInterval(interval);
       NRF.updateServices({
-        [SERVICE_UUID]: {
-          [CONTROL_CHAR_UUID]: [1],
+        "1234567890-1234-1234-1234-567890123456": {
+          "1234567890-1234-1234-1234-567890123458": [1],
         },
       });
 
@@ -206,8 +206,8 @@ function sendCSVFile(filename) {
     }
 
     NRF.updateServices({
-      [SERVICE_UUID]: {
-        [FILE_CHAR_UUID]: chunks[currentChunk],
+      "1234567890-1234-1234-1234-567890123456": {
+        "1234567890-1234-1234-1234-567890123457": chunks[currentChunk],
       },
     });
 
