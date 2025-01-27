@@ -1,32 +1,6 @@
 Bangle.loadWidgets();
 Bangle.drawWidgets();
 
-// Enable Bluetooth Low Energy
-NRF.wake();
-
-// const SERVICE_UUID = "1234567890-1234-1234-1234-567890123456";
-// const FILE_CHAR_UUID = "1234567890-1234-1234-1234-567890123457";
-// const CONTROL_CHAR_UUID = "1234567890-1234-1234-1234-567890123458";
-
-// Setup services
-NRF.setServices(
-  {
-    "1234567890-1234-1234-1234-567890123456": {
-      "1234567890-1234-1234-1234-567890123457": {
-        readable: true,
-        notify: true,
-        value: [], // Empty array by default
-      },
-      "1234567890-1234-1234-1234-567890123458": {
-        readable: true,
-        writable: true,
-        value: [0],
-      },
-    },
-  },
-  { advertise: ["12345678-1234-5678-1234-56789abcdef0"] },
-);
-
 let appSettings;
 
 function logAction(message) {
@@ -183,36 +157,43 @@ function showMainMenu() {
   return E.showMenu(mainMenu);
 }
 
-function sendCSVFile(filename) {
-  const file = require("Storage").read(filename);
+function sendCsvFile(filename) {
+  const content = require("Storage").read(filename);
 
-  if (!file) {
+  if (!content) {
+    logAction(`Failed to read file: ${filename}`);
     return;
   }
 
-  const chunks = file.match(/.{1,20}/g);
-  let currentChunk = 0;
+  Bluetooth.println(
+    JSON.stringify({
+      t: "file",
+      n: filename,
+      c: content,
+      timestamp: Date.now(),
+    }),
+  );
 
-  const interval = setInterval(() => {
-    if (currentChunk >= chunks.length) {
-      clearInterval(interval);
-      NRF.updateServices({
-        "1234567890-1234-1234-1234-567890123456": {
-          "1234567890-1234-1234-1234-567890123458": [1],
-        },
-      });
+  logAction(`Sent file: ${filename}`);
+}
 
-      return;
-    }
+function connectToAndroid(filename) {
+  NRF.connect("e8:f7:91:fb:61:db")
+    .then(() => {
+      logAction("Connected to Android");
+      sendCsvFile(filename);
+    })
+    .catch(() => {
+      logAction("Failed to connect to Android");
 
-    NRF.updateServices({
-      "1234567890-1234-1234-1234-567890123456": {
-        "1234567890-1234-1234-1234-567890123457": chunks[currentChunk],
-      },
+      // Only reconnect if between midnight and 1am
+      const now = new Date();
+      const hours = now.getHours();
+
+      if (hours >= 0 && hours < 1) {
+        setTimeout(() => connectToAndroid(filename), 5000);
+      }
     });
-
-    currentChunk += 1;
-  }, 50);
 }
 
 function viewFile(filename) {
@@ -230,7 +211,7 @@ function viewFile(filename) {
       });
     },
     Send: () => {
-      sendCSVFile("05_2025-01-16.csv");
+      connectToAndroid(filename);
     },
     "< Back": () => viewFiles(),
   });
