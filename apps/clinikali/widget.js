@@ -1,38 +1,36 @@
-{
-  let storageFile; // file for recording
+(() => {
+  let storageFile;
   let activeRecorders = [];
-  let writeSetup; // the interval for writing
+  let writeSetup;
 
-  const loadAppSettings = () => {
+  function loadAppSettings() {
     const appSettings = require("Storage").readJSON("clinikali.json", 1) || {};
+    appSettings.period = appSettings.period || 10;
+    appSettings.localeOffset = appSettings.localeOffset || 1;
 
-    appSettings.period = appSettings.period || 1;
-
-    if (!appSettings.file || !appSettings.file.startsWith("clinikali.log")) {
+    if (
+      !appSettings.file ||
+      !require("Storage").list(appSettings.file).length
+    ) {
       appSettings.recording = false;
     }
 
-    if (!appSettings.record) {
-      appSettings.record = ["accel", "hrm", "baro"];
-    }
-
     return appSettings;
-  };
+  }
 
-  const updateAppSettings = (appSettings) => {
+  function updateAppSettings(appSettings) {
     require("Storage").writeJSON("clinikali.json", appSettings);
-
     if (WIDGETS.recorder) {
       WIDGETS.recorder.reload();
     }
-  };
+  }
 
-  const getRecorders = () => {
+  function getRecorders() {
     const recorders = {
       accel: () => {
-        let x = "",
-          y = "",
-          z = "";
+        let x = 0,
+          y = 0,
+          z = 0;
 
         function onAccel(acceleration) {
           x = acceleration.x;
@@ -45,7 +43,9 @@
           fields: ["AccelX", "AccelY", "AccelZ"],
           getValues: () => {
             const result = [x, y, z];
-            (x = ""), (y = ""), (z = "");
+            x = 0;
+            y = 0;
+            z = 0;
             return result;
           },
           start: () => {
@@ -60,6 +60,7 @@
               .drawImage(atob("DAwBAAH4EIHIEIHIEIHIEIEIH4AA"), x, y),
         };
       },
+
       hrm: () => {
         let heartRate = "";
 
@@ -130,53 +131,84 @@
       );
 
     return recorders;
-  };
+  }
 
-  const getActiveRecorders = () => {
+  function getActiveRecorders() {
     const appSettings = loadAppSettings();
     const recorders = getRecorders();
 
-    // If no sensors are selected, return empty array
     if (!appSettings.record || appSettings.record.length === 0) {
       return [];
     }
 
-    // Only return recorders that are in the appSettings.record array
     return appSettings.record
-      .filter((name) => recorders[name]) // Make sure recorder exists
+      .filter((name) => recorders[name])
       .map((name) => recorders[name]());
-  };
+  }
 
-  const getCSVHeaders = (activeRecorders) =>
-    ["Time"].concat(activeRecorders.map((recorder) => recorder.fields));
+  function getCSVHeaders(activeRecorders) {
+    return ["Time"].concat(activeRecorders.map((recorder) => recorder.fields));
+  }
 
-  const writeLog = () => {
+  function writeLog() {
     WIDGETS.recorder.draw();
 
     try {
+      const appSettings = loadAppSettings();
+      const currentDate = new Date();
+      const localDate = new Date(
+        currentDate.getTime() + appSettings.localeOffset * 60 * 60 * 1000,
+      );
+
+      const currentDateStr = localDate.toISOString().slice(0, 10);
       const fields = [
-        new Date().toISOString().replace("T", " ").replace("Z", ""),
+        currentDate.toISOString().replace("T", " ").replace("Z", ""),
       ];
 
       activeRecorders.forEach((recorder) =>
         fields.push.apply(fields, recorder.getValues()),
       );
 
-      if (storageFile) {
-        storageFile.write(`${fields.join(",")}\n`);
+      // Check for day change before writing
+      if (appSettings.file && !appSettings.file.includes(currentDateStr)) {
+        // First write the last data point to the old file
+        if (storageFile) {
+          storageFile.write(`${fields.join(",")}\n`);
+        }
+
+        // Create and setup new file
+        const newFilename = `${appSettings.pid}_${currentDateStr}.csv`;
+
+        // Create new file and write headers without triggering a reload
+        const newFile = require("Storage").open(newFilename, "w");
+        const headers = getCSVHeaders(activeRecorders).join(","); // Flatten the headers array
+        newFile.write(`${headers}\n`);
+        // newFile.write(`${fields.join(",")}\n`);
+
+        // Update settings without triggering immediate reload
+        appSettings.file = newFilename;
+        require("Storage").writeJSON("clinikali.json", appSettings);
+
+        // Update storageFile reference
+        storageFile = newFile;
+
+        console.log("Day changed, created new file:", newFilename);
+      } else {
+        // Normal write to current file
+        if (storageFile) {
+          storageFile.write(`${fields.join(",")}\n`);
+        }
       }
     } catch (error) {
       console.log("recorder: error", error);
       const appSettings = loadAppSettings();
-
       appSettings.recording = false;
-
       require("Storage").write("clinikali.json", appSettings);
       reload();
     }
-  };
+  }
 
-  const reload = () => {
+  function reload() {
     const appSettings = loadAppSettings();
 
     if (typeof writeSetup === "number") {
@@ -189,11 +221,9 @@
 
     if (appSettings.recording) {
       activeRecorders = getActiveRecorders();
-      activeRecorders.forEach((activeRecorder) => {
-        activeRecorder.start();
-      });
+      activeRecorders.forEach((activeRecorder) => activeRecorder.start());
 
-      WIDGETS.recorder.width = 15 + ((activeRecorders.length + 1) >> 1) * 12; // 12px per recorder
+      WIDGETS.recorder.width = 15 + ((activeRecorders.length + 1) >> 1) * 12;
 
       if (require("Storage").list(appSettings.file).length) {
         storageFile = require("Storage").open(appSettings.file, "a");
@@ -203,26 +233,29 @@
       }
 
       WIDGETS.recorder.draw();
-      writeSetup = setInterval(writeLog, Math.floor(1000 / appSettings.period));
+      writeSetup = setInterval(
+        writeLog,
+        appSettings.period * 1000,
+        appSettings.period,
+      );
     } else {
       WIDGETS.recorder.width = 0;
       storageFile = undefined;
     }
-  };
+  }
 
   WIDGETS.recorder = {
     area: "tl",
     width: 0,
     draw: function () {
-      if (!writeSetup) {
-        return;
-      }
+      if (!writeSetup) return;
 
       g.reset().drawImage(
         atob("DRSBAAGAHgDwAwAAA8B/D/hvx38zzh4w8A+AbgMwGYDMDGBjAA=="),
         this.x + 1,
         this.y + 2,
       );
+
       activeRecorders.forEach((recorder, index) => {
         recorder.draw(
           this.x + 15 + (index >> 1) * 12,
@@ -236,24 +269,22 @@
       Bangle.drawWidgets();
     },
     isRecording: () => !!writeSetup,
-    setRecording: (isOn, options) => {
+    setRecording: (isOn) => {
       const appSettings = loadAppSettings();
 
-      options = options || {};
-
       if (isOn && !appSettings.recording) {
-        const currentDate = new Date().toISOString().slice(0, 10); // YYYY-MM-DD format
-        let letterIndex = "a";
-
-        function generateTrackFilename() {
-          return `${appSettings.pid}_${currentDate}_${letterIndex}.csv`;
-        }
+        const currentDate = new Date().toISOString().slice(0, 10);
+        const filename = `${appSettings.pid}_${currentDate}.csv`;
 
         if (
           !appSettings.file ||
           !appSettings.file.startsWith(`${appSettings.pid}_${currentDate}`)
         ) {
-          appSettings.file = generateTrackFilename();
+          appSettings.file = filename;
+
+          if (require("Storage").list(filename).length) {
+            require("Storage").open(filename, "r").erase();
+          }
         }
 
         const existingHeaders = require("Storage")
@@ -265,51 +296,23 @@
             existingHeaders.trim() !==
             getCSVHeaders(getActiveRecorders(appSettings)).join(",")
           ) {
-            options.force = "new";
+            const storageFile = require("Storage").open(appSettings.file, "a");
+            const timestamp = new Date()
+              .toISOString()
+              .replace("T", " ")
+              .replace("Z", "");
+            storageFile.write(
+              `\n### New sensor configuration at ${timestamp} ###\n`,
+            );
+            storageFile.write(
+              `${getCSVHeaders(getActiveRecorders(appSettings)).join(",")}\n`,
+            );
           }
-
-          if (!options.force) {
-            g.reset();
-            return E.showPrompt(
-              `Overwrite\nLog ${appSettings.file
-                .split("_")[2]
-                .replace(".csv", "")}?`, // Show just the letter
-              {
-                title: "Recorder",
-                buttons: {
-                  Yes: "overwrite",
-                  No: "cancel",
-                  New: "new",
-                  Append: "append",
-                },
-              },
-            ).then((selection) => {
-              if (selection === "cancel") return false;
-              if (selection === "overwrite")
-                return WIDGETS.recorder.setRecording(1, { force: "overwrite" });
-              if (selection === "new")
-                return WIDGETS.recorder.setRecording(1, { force: "new" });
-              if (selection === "append")
-                return WIDGETS.recorder.setRecording(1, { force: "append" });
-              throw new Error("Unknown response!");
-            });
-          }
-
-          if (options.force === "append") {
-            // do nothing, filename is the same - we are good
-          } else if (options.force === "overwrite") {
-            require("Storage").open(appSettings.file, "r").erase();
-          } else if (options.force === "new") {
-            let newFileName;
-            do {
-              newFileName = generateTrackFilename();
-              letterIndex = String.fromCharCode(letterIndex.charCodeAt(0) + 1);
-            } while (require("Storage").list(newFileName).length);
-
-            appSettings.file = newFileName;
-          } else {
-            throw new Error(`Unknown options.force, ${options.force}`);
-          }
+        } else {
+          const storageFile = require("Storage").open(appSettings.file, "w");
+          storageFile.write(
+            `${getCSVHeaders(getActiveRecorders(appSettings)).join(",")}\n`,
+          );
         }
       }
 
@@ -321,4 +324,4 @@
   };
 
   reload();
-}
+})();
