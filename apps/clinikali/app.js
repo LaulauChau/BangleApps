@@ -1,246 +1,243 @@
-Bangle.loadWidgets();
-Bangle.drawWidgets();
+/**
+ * @param {string} message
+ * @param {"info" | "warn" | "error"} severity
+ *
+ * @returns {void}
+ */
+function logAction(message, severity = "info") {
+  const logFile = require("Storage").open("clinikali.log.txt", "a");
+  const logEntry = `${new Date().toISOString()} [${severity.toUpperCase()}] ${message}\n`;
 
-let appSettings;
-
-function logAction(message) {
-  const logFile = "clinikali.log.txt";
-  const timestamp = new Date().toISOString();
-  const logEntry = `[${timestamp}] ${message}\n`;
-  require("Storage").open(logFile, "a").write(logEntry);
+  return logFile.write(logEntry);
 }
 
-function loadAppSettings() {
-  appSettings = require("Storage").readJSON("clinikali.json", 1) || {};
-  let settingsChanged = false;
+/**
+ * @returns {{ [key: string]: unknown }}
+ */
+function getAppSettings() {
+  /** @type {{ [key: string]: unknown }} */
+  const appSettingsFile =
+    require("Storage").readJSON("clinikali.json", 1) || {};
 
-  if (!appSettings.localeOffset) {
-    settingsChanged = true;
-    appSettings.locale = 1;
-  }
-
-  if (!appSettings.pid) {
-    settingsChanged = true;
-    appSettings.pid = "05"; // Default PID
-  }
-
-  if (!appSettings.record) {
-    settingsChanged = true;
-    appSettings.record = ["accel", "hrm", "baro"];
-  }
-
-  if (!appSettings.period) {
-    settingsChanged = true;
-    appSettings.period = 1;
-  }
-
-  if (typeof appSettings.recording === "undefined") {
-    settingsChanged = true;
-    appSettings.recording = false;
-  }
-
-  if (settingsChanged) {
-    require("Storage").writeJSON("clinikali.json", appSettings);
-  }
-
-  return appSettings;
-}
-
-function updateAppSettings() {
-  require("Storage").writeJSON("clinikali.json", appSettings);
-  if (WIDGETS.recorder) {
-    WIDGETS.recorder.reload();
-  }
-}
-
-function generateFilename() {
-  const date = new Date();
-  const dateStr = date.toISOString().slice(0, 10);
-  return `${appSettings.pid}_${dateStr}.csv`;
-}
-
-function extractFileNumber(filename) {
-  if (!filename) return "";
-
-  const parts = filename.split("_");
-  return parts.length >= 2 ? `${parts[0]} ${parts[1]}` : filename;
-}
-
-function toggleRecorder(name) {
-  const index = appSettings.record.indexOf(name);
-
-  if (index === -1) {
-    appSettings.record.push(name);
-    logAction(`Sensor ${name} enabled`);
-  } else {
-    appSettings.record.splice(index, 1);
-    logAction(`Sensor ${name} disabled`);
-  }
-
-  updateAppSettings();
-  showSensorMenu();
-}
-
-function showSensorMenu() {
-  const appSettings = loadAppSettings();
-  if (!appSettings.record) {
-    appSettings.record = ["accel", "hrm", "baro"];
-    updateAppSettings();
-  }
-
-  const sensorMenu = {
-    "": { title: "Sensors" },
-    Accelerometer: {
-      value: appSettings.record.includes("accel"),
-      onchange: () => toggleRecorder("accel"),
+  return Object.assign(
+    {},
+    {
+      period: 1,
+      pid: "05",
+      record: ["accel", "baro", "hrm"],
+      recording: false,
     },
-    "Heart Rate": {
-      value: appSettings.record.includes("hrm"),
-      onchange: () => toggleRecorder("hrm"),
+    appSettingsFile,
+  );
+}
+
+/**
+ * @param {{ [key: string]: unknown }} newSettings
+ *
+ * @returns {void}
+ */
+function setAppSettings(newSettings) {
+  const appSettings = getAppSettings();
+  const updatedSettings = Object.assign({}, appSettings, newSettings);
+
+  require("Storage").writeJSON("clinikali.json", updatedSettings);
+  logAction("Settings updated");
+}
+
+/**
+ * @param {string} sensorName
+ *
+ * @returns {void}
+ */
+function toggleSensorRecording(sensorName) {
+  const appSettings = getAppSettings();
+  /** @type {string[]} */
+  const record = appSettings.record;
+  const sensorIndex = record.indexOf(sensorName);
+
+  if (sensorIndex === -1) {
+    record.push(sensorName);
+    logAction(`Sensor ${sensorName} enabled`);
+  } else {
+    record.splice(sensorIndex, 1);
+    logAction(`Sensor ${sensorName} disabled`);
+  }
+
+  setAppSettings({ record });
+}
+
+/**
+ * @returns {void}
+ */
+function showSensorMenu() {
+  const appSettings = getAppSettings();
+  const record = appSettings.record;
+
+  const menu = {
+    "": { title: /*LANG*/ "Sensors" },
+    /*LANG*/ Accelerometer: {
+      onchange: () => toggleSensorRecording("accel"),
+      value: record.includes("accel"),
+    },
+    /*LANG*/ "Heart Rate": {
+      onchange: () => toggleSensorRecording("hrm"),
+      value: record.includes("hrm"),
     },
   };
 
   if (Bangle.getPressure) {
-    sensorMenu["Temperature"] = {
-      value: appSettings.record.includes("baro"),
-      onchange: () => toggleRecorder("baro"),
+    menu[/*LANG*/ "Temperature"] = {
+      onchange: () => toggleSensorRecording("baro"),
+      value: record.includes("baro"),
     };
   }
 
-  sensorMenu["< Back"] = () => showMainMenu();
+  menu[/*LANG*/ "< Back"] = () => showMainMenu();
 
-  return E.showMenu(sensorMenu);
+  return E.showMenu(menu);
 }
 
-function showMainMenu() {
-  const mainMenu = {
-    "": { title: "Clinikali" },
-    "< Back": () => load(),
-    Record: {
-      value: !!appSettings.recording,
-      onchange: (newValue) => {
-        setTimeout(() => {
-          E.showMenu();
-
-          if (newValue) {
-            const newFilename = generateFilename();
-            appSettings.file = newFilename;
-            updateAppSettings();
-            logAction(`Created new file: ${newFilename}`);
-          }
-
-          WIDGETS.recorder.setRecording(newValue).then(() => {
-            loadAppSettings();
-            logAction(`Recording ${newValue ? "started" : "stopped"}`);
-            showMainMenu();
-          });
-        }, 1);
-      },
-    },
-    "View Files": () => viewFiles(),
-    Sensors: () => showSensorMenu(),
-    "Time Period": {
-      value: appSettings.period || 1,
-      min: 1,
-      max: 120,
-      step: 1,
-      format: (value) => `${value} Hz`,
-      onchange: (newValue) => {
-        appSettings.recording = false;
-        appSettings.period = newValue;
-        logAction(`Sampling period changed to ${newValue}Hz`);
-        updateAppSettings();
-      },
-    },
+/**
+ * @returns {void}
+ */
+function showFilesMenu() {
+  const menu = {
+    "": { title: /*LANG*/ "Files" },
   };
 
-  return E.showMenu(mainMenu);
-}
+  /** @type {string[]} */
+  const fileList = require("Storage")
+    .list(/\d+_\d+-\d+-\d+\.csv/, { sf: true })
+    .reverse();
 
-function sendCsvFile(filename) {
-  const content = require("Storage").read(filename);
-
-  if (!content) {
-    logAction(`Failed to read file: ${filename}`);
-    return;
+  if (fileList.length === 0) {
+    menu[/*LANG*/ "No files found"] = () => {};
+  } else {
+    for (const file of fileList) {
+      menu[file.match(/\d+-\d+-\d+/)[0]] = () => showFileMenu(file);
+    }
   }
 
-  Bluetooth.println(
-    JSON.stringify({
-      t: "file",
-      n: filename,
-      c: content,
-      timestamp: Date.now(),
-    }),
-  );
+  menu[/*LANG*/ "< Back"] = () => showMainMenu();
 
-  logAction(`Sent file: ${filename}`);
+  return E.showMenu(menu);
 }
 
-function connectToAndroid(filename) {
-  NRF.connect("e8:f7:91:fb:61:db")
+/**
+ * @param {string} fileName
+ *
+ * @returns {void}
+ */
+function deleteFile(fileName) {
+  return E.showPrompt(/*LANG*/ "Delete file?").then((shouldDelete) => {
+    if (!shouldDelete) {
+      return showFileMenu(fileName);
+    }
+
+    require("Storage").open(fileName, "r").erase();
+    logAction(`File ${fileName} deleted`, "warn");
+
+    return showFilesMenu();
+  });
+}
+
+/**
+ * @param {string} fileName
+ *
+ * @returns {void}
+ */
+function sendCsvFile(fileName) {
+  const fileContent = require("Storage").read(fileName);
+
+  if (!fileContent) {
+    return logAction(`File ${fileName} not found`, "error");
+  }
+
+  const { macAddress } = getAppSettings();
+
+  NRF.connect(macAddress)
     .then(() => {
-      logAction("Connected to Android");
-      sendCsvFile(filename);
+      logAction(`Connected to ${macAddress}`);
+
+      Bluetooth.println(
+        JSON.stringify({
+          c: fileContent,
+          n: fileName,
+          t: "file",
+          timestamp: Date.now(),
+        }),
+      );
+
+      logAction(`Sent file ${fileName}`);
+
+      E.showMessage("File sent");
+
+      setTimeout(() => showFilesMenu(), 1000);
     })
     .catch(() => {
-      logAction("Failed to connect to Android");
+      logAction(`Failed to connect to ${macAddress}`, "error");
 
-      // Only reconnect if between midnight and 1am
-      const now = new Date();
-      const hours = now.getHours();
+      const now = new Date().getHours();
 
-      if (hours >= 0 && hours < 1) {
-        setTimeout(() => connectToAndroid(filename), 5000);
+      if (now >= 0 && now < 1) {
+        setTimeout(() => sendCsvFile(fileName), 60000 * 5);
+      } else {
+        E.showMessage("Failed to connect");
+
+        setTimeout(() => showFilesMenu(), 1000);
       }
     });
 }
 
-function viewFile(filename) {
-  E.showMenu({
-    "": { title: `File ${extractFileNumber(filename)}` },
-    Delete: () => {
-      E.showPrompt("Delete File?").then((shouldDelete) => {
-        if (shouldDelete) {
-          require("Storage").erase(filename);
-          logAction(`Deleted file: ${filename}`);
-          viewFiles();
-        } else {
-          viewFile(filename);
-        }
-      });
-    },
-    Send: () => {
-      connectToAndroid(filename);
-    },
-    "< Back": () => viewFiles(),
-  });
-}
-
-function viewFiles() {
-  const fileMenu = {
-    "": { title: "Files" },
+/**
+ * @param {string} fileName
+ *
+ * @returns {void}
+ */
+function showFileMenu(fileName) {
+  const menu = {
+    "": { title: fileName },
+    Delete: () => deleteFile(fileName),
+    Send: () => sendCsvFile(fileName),
   };
 
-  let filesFound = false;
+  menu[/*LANG*/ "< Back"] = () => showFilesMenu();
 
-  require("Storage")
-    .list(/\d+_\d+-\d+-\d+\.csv/, { sf: true })
-    .reverse()
-    .forEach((filename) => {
-      filesFound = true;
-      fileMenu[extractFileNumber(filename)] = () => viewFile(filename);
-    });
-
-  if (!filesFound) {
-    fileMenu["No Files found"] = () => {};
-  }
-
-  fileMenu["< Back"] = () => showMainMenu();
-
-  return E.showMenu(fileMenu);
+  return E.showMenu(menu);
 }
 
-// Initialize app
-loadAppSettings();
+/**
+ * @returns {void}
+ */
+function showMainMenu() {
+  const menu = {
+    "": { title: "Clinikali" },
+    /*LANG*/ "< Back": () => load(),
+    /*LANG*/ Record: {
+      onchange: (shouldRecord) => {
+        WIDGETS.clinikali.setRecording(shouldRecord).then(() => {
+          logAction(`Recording ${shouldRecord ? "enabled" : "disabled"}`);
+          showMainMenu();
+        });
+      },
+      value: !!getAppSettings().recording,
+    },
+    /*LANG*/ "View files": () => showFilesMenu(),
+    /*LANG*/ Sensors: () => showSensorMenu(),
+    /*LANG*/ "Time period": {
+      format: (value) => `${value} Hz`,
+      max: 60,
+      min: 1,
+      onchange: (period) => {
+        logAction(`Period set to ${period} Hz`);
+        setAppSettings({ period, recording: false });
+      },
+      step: 1,
+      value: getAppSettings().period,
+    },
+  };
+
+  return E.showMenu(menu);
+}
+
 showMainMenu();

@@ -176,7 +176,15 @@
         "nine": "neuf",
         "ten": "dix",
         "eleven": "onze",
-        "twelve": "douze"
+        "twelve": "douze",
+        "Sensors": "Capteurs",
+        "Temperature": "Température",
+        "Files": "Fichiers",
+        "No files found": "Aucun fichier trouvé",
+        "Delete file": "Supprimer le fichier",
+        "View files": "Voir les fichiers",
+        "Time period": "Période de temps",
+        "Heart Rate": "Fréquence cardiaque"
     },
     "alarm": {
         "//": "App-specific overrides",
