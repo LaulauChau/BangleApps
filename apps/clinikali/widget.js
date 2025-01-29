@@ -1,411 +1,324 @@
-() => {
-  /**
-   * @typedef {Object} Recorder
-   * @property {string} name
-   * @property {string[]} fields
-   * @property {() => Array<string|number>} getValues
-   * @property {() => void} start
-   * @property {() => void} stop
-   * @property {(x: number, y: number) => void} draw
-   */
+{
+  let storageFile; // file for recording
+  let activeRecorders = [];
+  let writeSetup; // the interval for writing
 
-  /**
-   * @param {string} message
-   * @param {"info" | "warn" | "error" } severity
-   *
-   * @returns {void}
-   */
-  function logAction(message, severity) {
-    const logFile = require("Storage").open("clinikali.log.txt", "a");
-    const logEntry = `${new Date().toISOString()} [${severity.toUpperCase()}] ${message}\n`;
+  const loadAppSettings = () => {
+    const appSettings = require("Storage").readJSON("clinikali.json", 1) || {};
 
-    return logFile.write(logEntry);
-  }
+    appSettings.period = appSettings.period || 1;
 
-  /**
-   * @returns {{ [key: string]: unknown }}
-   */
-  function getAppSettings() {
-    /** @type {{ [key: string]: unknown }} */
-    const appSettingsFile =
-      require("Storage").readJSON("clinikali.json", 1) || {};
-
-    return Object.assign(
-      {},
-      {
-        period: 1,
-        pid: "05",
-        record: ["accel", "baro", "hrm"],
-        recording: false,
-      },
-      appSettingsFile,
-    );
-  }
-
-  /**
-   * @param {{ [key: string]: unknown }} newSettings
-   *
-   * @returns {void}
-   */
-  function setAppSettings(newSettings) {
-    const appSettings = getAppSettings();
-    const updatedSettings = Object.assign({}, appSettings, newSettings);
-
-    require("Storage").writeJSON("clinikali.json", updatedSettings);
-    logAction("Settings updated", "info");
-  }
-
-  /**
-   * @returns {Recorder}
-   */
-  function getAccelerometerRecorder() {
-    let x = 0,
-      y = 0,
-      z = 0;
-
-    /**
-     * @param {{ x: number, y: number, z: number }} acceleration
-     *
-     * @returns {void}
-     */
-    function onAccel(acceleration) {
-      x = acceleration.x;
-      y = acceleration.y;
-      z = acceleration.z;
+    if (!appSettings.file || !appSettings.file.startsWith("clinikali.log")) {
+      appSettings.recording = false;
     }
 
-    return {
-      name: "Accel",
-      fields: ["AccelX", "AccelY", "AccelZ"],
-      getValues: () => {
-        const result = [x, y, z];
-
-        x = 0;
-        y = 0;
-        z = 0;
-
-        return result;
-      },
-      start: () => Bangle.on("accel", onAccel),
-      stop: () => Bangle.removeListener("accel", onAccel),
-      draw: (x, y) =>
-        g
-          .setColor("#00f")
-          .drawImage(atob("DAwBAAH4EIHIEIHIEIHIEIEIH4AA"), x, y),
-    };
-  }
-
-  /**
-   * @returns {Recorder}
-   */
-  function getHRMRecorder() {
-    let bpm = 0;
-
-    /**
-     * @param {{ bpm: number }} heartRateData
-     */
-    function onHRM(heartRateData) {
-      bpm = heartRateData.bpm;
+    if (!appSettings.record) {
+      appSettings.record = ["accel", "hrm", "baro"];
     }
 
-    return {
-      name: "HR",
-      fields: ["Heartrate"],
-      getValues: () => {
-        const result = [bpm];
+    return appSettings;
+  };
 
-        bpm = 0;
+  const updateAppSettings = (appSettings) => {
+    require("Storage").writeJSON("clinikali.json", appSettings);
 
-        return result;
-      },
-      start: () => {
-        Bangle.setHRMPower(1, "clinikali");
-        Bangle.on("HRM", onHRM);
-      },
-      stop: () => {
-        Bangle.removeListener("HRM", onHRM);
-        Bangle.setHRMPower(0, "clinikali");
-      },
-      draw: (x, y) =>
-        g
-          .setColor(Bangle.isHRMOn() ? "#f00" : "#f88")
-          .drawImage(atob("DAwBAAAAMMeef+f+f+P8H4DwBgAA"), x, y),
-    };
-  }
-
-  /**
-   * @returns {Recorder}
-   */
-  function getBarometerRecorder() {
-    let temperature = 0;
-
-    /**
-     * @param {{ temperature: number }} pressureData
-     */
-    function onPressure(pressureData) {
-      temperature = pressureData.temperature;
+    if (WIDGETS.recorder) {
+      WIDGETS.recorder.reload();
     }
+  };
 
-    return {
-      name: "Baro",
-      fields: ["Temperature"],
-      getValues: () => {
-        const result = [temperature];
-
-        temperature = 0;
-
-        return result;
-      },
-      start: () => {
-        Bangle.setBarometerPower(1, "clinikali");
-        Bangle.on("pressure", onPressure);
-      },
-      stop: () => {
-        Bangle.removeListener("pressure", onPressure);
-        Bangle.setBarometerPower(0, "clinikali");
-      },
-      draw: (x, y) =>
-        g
-          .setColor("#0f0")
-          .drawImage(atob("DAwBAAH4EIHIEIHIEIHIEIEIH4AA"), x, y),
-    };
-  }
-
-  /**
-   * @returns {{ [key: string]: () => Recorder }}
-   */
-  function getRecorders() {
+  const getRecorders = () => {
     const recorders = {
-      accel: getAccelerometerRecorder,
-      hrm: getHRMRecorder,
+      accel: () => {
+        let x = "",
+          y = "",
+          z = "";
+
+        function onAccel(acceleration) {
+          x = acceleration.x;
+          y = acceleration.y;
+          z = acceleration.z;
+        }
+
+        return {
+          name: "Accel",
+          fields: ["AccelX", "AccelY", "AccelZ"],
+          getValues: () => {
+            const result = [x, y, z];
+            (x = ""), (y = ""), (z = "");
+            return result;
+          },
+          start: () => {
+            Bangle.on("accel", onAccel);
+          },
+          stop: () => {
+            Bangle.removeListener("accel", onAccel);
+          },
+          draw: (x, y) =>
+            g
+              .setColor("#00f")
+              .drawImage(atob("DAwBAAH4EIHIEIHIEIHIEIEIH4AA"), x, y),
+        };
+      },
+      hrm: () => {
+        let heartRate = "";
+
+        function onHRM(heartRateData) {
+          heartRate = heartRateData.bpm;
+        }
+
+        return {
+          name: "HR",
+          fields: ["Heartrate"],
+          getValues: () => {
+            const result = [heartRate];
+            heartRate = "";
+            return result;
+          },
+          start: () => {
+            Bangle.on("HRM", onHRM);
+            Bangle.setHRMPower(1, "recorder");
+          },
+          stop: () => {
+            Bangle.removeListener("HRM", onHRM);
+            Bangle.setHRMPower(0, "recorder");
+          },
+          draw: (x, y) =>
+            g
+              .setColor(Bangle.isHRMOn() ? "#f00" : "#f88")
+              .drawImage(atob("DAwBAAAAMMeef+f+f+P8H4DwBgAA"), x, y),
+        };
+      },
     };
 
     if (Bangle.getPressure) {
-      recorders.baro = getBarometerRecorder;
+      recorders.baro = () => {
+        let temperature = "";
+
+        function onPressure(pressureData) {
+          temperature = pressureData.temperature;
+        }
+
+        return {
+          name: "Baro",
+          fields: ["Barometer Temperature"],
+          getValues: () => {
+            const result = [temperature];
+            temperature = "";
+            return result;
+          },
+          start: () => {
+            Bangle.setBarometerPower(1, "recorder");
+            Bangle.on("pressure", onPressure);
+          },
+          stop: () => {
+            Bangle.setBarometerPower(0, "recorder");
+            Bangle.removeListener("pressure", onPressure);
+          },
+          draw: (x, y) =>
+            g
+              .setColor("#0f0")
+              .drawImage(atob("DAwBAAH4EIHIEIHIEIHIEIEIH4AA"), x, y),
+        };
+      };
     }
 
     require("Storage")
       .list(/^.*\.clinikali\.js$/)
-      .forEach((fileName) =>
-        eval(require("Storage").read(fileName))(recorders),
+      .forEach((filename) =>
+        eval(require("Storage").read(filename))(recorders),
       );
 
     return recorders;
-  }
+  };
 
-  /**
-   * @returns {Recorder[]}
-   */
-  function getActiveRecorders() {
-    const appSettings = getAppSettings();
+  const getActiveRecorders = () => {
+    const appSettings = loadAppSettings();
     const recorders = getRecorders();
 
+    // If no sensors are selected, return empty array
     if (!appSettings.record || appSettings.record.length === 0) {
       return [];
     }
 
+    // Only return recorders that are in the appSettings.record array
     return appSettings.record
-      .filter((name) => recorders[name])
+      .filter((name) => recorders[name]) // Make sure recorder exists
       .map((name) => recorders[name]());
-  }
+  };
 
-  /**
-   * @param {Recorder[]} activeRecorders
-   *
-   * @returns {string[]}
-   */
-  function getCSVHeaders(activeRecorders) {
-    return ["Time"].concat(
-      activeRecorders.map((recorder) => recorder.fields).flat(),
-    );
-  }
+  const getCSVHeaders = (activeRecorders) =>
+    ["Time"].concat(activeRecorders.map((recorder) => recorder.fields));
 
-  /**
-   * @param {string} fileName
-   * @param {Recorder[]} activeRecorders
-   */
-  function initializeNewFile(fileName, activeRecorders) {
-    const file = require("Storage").open(fileName, "w");
-    const headers = getCSVHeaders(activeRecorders);
+  const writeLog = () => {
+    WIDGETS.recorder.draw();
 
-    file.write(headers.join(",") + "\n");
+    try {
+      const fields = [
+        new Date().toISOString().replace("T", " ").replace("Z", ""),
+      ];
 
-    return file;
-  }
+      activeRecorders.forEach((recorder) =>
+        fields.push.apply(fields, recorder.getValues()),
+      );
 
-  class RecorderWidget {
-    constructor() {
-      this.activeRecorders = [];
-      this.storageFile = null;
-      this.writeSetup = undefined;
+      if (storageFile) {
+        storageFile.write(`${fields.join(",")}\n`);
+      }
+    } catch (error) {
+      console.log("recorder: error", error);
+      const appSettings = loadAppSettings();
+
+      appSettings.recording = false;
+
+      require("Storage").write("clinikali.json", appSettings);
+      reload();
+    }
+  };
+
+  const reload = () => {
+    const appSettings = loadAppSettings();
+
+    if (typeof writeSetup === "number") {
+      clearInterval(writeSetup);
     }
 
-    writeData() {
-      WIDGETS.clinikali.draw();
+    writeSetup = undefined;
+    activeRecorders.forEach((recorder) => recorder.stop());
+    activeRecorders = [];
 
-      try {
-        const appSettings = getAppSettings();
-        const currentDate = new Date();
-        const localDate = new Date(
-          currentDate.getTime() + appSettings.localeOffset * 60 * 60 * 1000,
-        );
-        const currentDateStr = localDate.toISOString().slice(0, 10);
+    if (appSettings.recording) {
+      activeRecorders = getActiveRecorders();
+      activeRecorders.forEach((activeRecorder) => {
+        activeRecorder.start();
+      });
 
-        const fields = [
-          currentDate.toISOString().replace("T", " ").replace("Z", ""),
-        ];
-        this.activeRecorders.forEach((recorder) =>
-          fields.push.apply(fields, recorder.getValues()),
-        );
-
-        if (appSettings.file && !appSettings.file.includes(currentDateStr)) {
-          if (this.storageFile) {
-            this.storageFile.write(`${fields.join(",")}\n`);
-          }
-
-          const newFilename = `${appSettings.pid}_${currentDateStr}.csv`;
-
-          this.storageFile = initializeNewFile(
-            newFilename,
-            this.activeRecorders,
-          );
-
-          setAppSettings({ file: newFilename });
-          logAction(`New file created: ${newFilename}`, "info");
-        } else {
-          this.storageFile.write(`${fields.join(",")}\n`);
-        }
-      } catch (error) {
-        logAction(`Error: ${error}`, "error");
-        setAppSettings({ recording: false });
-        this.reload();
-      }
-    }
-
-    reload() {
-      const appSettings = getAppSettings();
-
-      if (typeof this.writeSetup === "number") {
-        clearInterval(this.writeSetup);
-      }
-
-      this.writeSetup = undefined;
-      this.activeRecorders.forEach((recorder) => recorder.stop());
-
-      if (!appSettings.recording) {
-        WIDGETS.clinikali.width = 0;
-        this.storageFile = null;
-        return;
-      }
-
-      this.activeRecorders = getActiveRecorders();
-      this.activeRecorders.forEach((recorder) => recorder.start());
-      WIDGETS.clinikali.width =
-        15 + ((this.activeRecorders.length + 1) >> 1) * 12;
+      WIDGETS.recorder.width = 15 + ((activeRecorders.length + 1) >> 1) * 12; // 12px per recorder
 
       if (require("Storage").list(appSettings.file).length) {
-        this.storageFile = require("Storage").open(appSettings.file, "a");
+        storageFile = require("Storage").open(appSettings.file, "a");
       } else {
-        this.storageFile = initializeNewFile(
-          appSettings.file,
-          this.activeRecorders,
-        );
+        storageFile = require("Storage").open(appSettings.file, "w");
+        storageFile.write(`${getCSVHeaders(activeRecorders).join(",")}\n`);
       }
 
-      WIDGETS.clinikali.draw();
-      this.writeSetup = setInterval(
-        () => this.writeData(),
-        appSettings.period * 1000,
-        appSettings.period,
-      );
+      WIDGETS.recorder.draw();
+      writeSetup = setInterval(writeLog, Math.floor(1000 / appSettings.period));
+    } else {
+      WIDGETS.recorder.width = 0;
+      storageFile = undefined;
     }
+  };
 
-    /**
-     * @param {boolean} isOn
-     *
-     * @returns {Promise<boolean>}
-     */
-    setRecording(isOn) {
-      const appSettings = getAppSettings();
-
-      if (isOn && !appSettings.recording) {
-        const currentDate = new Date().toISOString().slice(0, 10);
-        const fileName = `${appSettings.pid}_${currentDate}.csv`;
-
-        if (
-          !appSettings.file ||
-          !appSettings.file.includes(fileName.replace(".csv", ""))
-        ) {
-          if (require("Storage").list(fileName).length) {
-            require("Storage").open(fileName, "r").erase();
-          }
-
-          setAppSettings({ file: fileName });
-        }
-
-        const existingHeaders = require("Storage")
-          .open(appSettings.file, "r")
-          .readLine();
-        const newHeaders = getCSVHeaders(this.activeRecorders).join(",");
-
-        if (existingHeaders && existingHeaders.trim() !== newHeaders) {
-          const storageFile = require("Storage").open(appSettings.file, "a");
-          const timestamp = new Date()
-            .toISOString()
-            .replace("T", " ")
-            .replace("Z", "");
-
-          storageFile.write(
-            `\n### New sensor configuration at ${timestamp} ###\n`,
-          );
-          storageFile.write(`${newHeaders}\n`);
-
-          logAction(`New headers added to ${appSettings.file}`, "info");
-        } else {
-          this.storageFile = initializeNewFile(
-            appSettings.file,
-            getActiveRecorders(),
-          );
-        }
-      }
-
-      setAppSettings({ recording: isOn });
-
-      WIDGETS.clinikali.reload();
-
-      return Promise.resolve(true);
-    }
-  }
-
-  const recorderWidget = new RecorderWidget();
-
-  WIDGETS.clinikali = {
+  WIDGETS.recorder = {
     area: "tl",
     width: 0,
     draw: function () {
-      if (!recorderWidget.writeSetup) return;
+      if (!writeSetup) {
+        return;
+      }
 
       g.reset().drawImage(
         atob("DRSBAAGAHgDwAwAAA8B/D/hvx38zzh4w8A+AbgMwGYDMDGBjAA=="),
         this.x + 1,
         this.y + 2,
       );
-
-      recorderWidget.activeRecorders.forEach((recorder, index) => {
+      activeRecorders.forEach((recorder, index) => {
         recorder.draw(
           this.x + 15 + (index >> 1) * 12,
           this.y + (index & 1) * 12,
         );
       });
     },
-    getRecorders,
+    getRecorders: getRecorders,
     reload: () => {
-      recorderWidget.reload();
+      reload();
       Bangle.drawWidgets();
     },
-    isRecording: () => !!recorderWidget.writeSetup,
-    setRecording: (isOn) => recorderWidget.setRecording(isOn),
+    isRecording: () => !!writeSetup,
+    setRecording: (isOn, options) => {
+      const appSettings = loadAppSettings();
+
+      options = options || {};
+
+      if (isOn && !appSettings.recording) {
+        const currentDate = new Date().toISOString().slice(0, 10); // YYYY-MM-DD format
+        let letterIndex = "a";
+
+        function generateTrackFilename() {
+          return `${appSettings.pid}_${currentDate}_${letterIndex}.csv`;
+        }
+
+        if (
+          !appSettings.file ||
+          !appSettings.file.startsWith(`${appSettings.pid}_${currentDate}`)
+        ) {
+          appSettings.file = generateTrackFilename();
+        }
+
+        const existingHeaders = require("Storage")
+          .open(appSettings.file, "r")
+          .readLine();
+
+        if (existingHeaders) {
+          if (
+            existingHeaders.trim() !==
+            getCSVHeaders(getActiveRecorders(appSettings)).join(",")
+          ) {
+            options.force = "new";
+          }
+
+          if (!options.force) {
+            g.reset();
+            return E.showPrompt(
+              `Overwrite\nLog ${appSettings.file
+                .split("_")[2]
+                .replace(".csv", "")}?`, // Show just the letter
+              {
+                title: "Recorder",
+                buttons: {
+                  Yes: "overwrite",
+                  No: "cancel",
+                  New: "new",
+                  Append: "append",
+                },
+              },
+            ).then((selection) => {
+              if (selection === "cancel") return false;
+              if (selection === "overwrite")
+                return WIDGETS.recorder.setRecording(1, { force: "overwrite" });
+              if (selection === "new")
+                return WIDGETS.recorder.setRecording(1, { force: "new" });
+              if (selection === "append")
+                return WIDGETS.recorder.setRecording(1, { force: "append" });
+              throw new Error("Unknown response!");
+            });
+          }
+
+          if (options.force === "append") {
+            // do nothing, filename is the same - we are good
+          } else if (options.force === "overwrite") {
+            require("Storage").open(appSettings.file, "r").erase();
+          } else if (options.force === "new") {
+            let newFileName;
+            do {
+              newFileName = generateTrackFilename();
+              letterIndex = String.fromCharCode(letterIndex.charCodeAt(0) + 1);
+            } while (require("Storage").list(newFileName).length);
+
+            appSettings.file = newFileName;
+          } else {
+            throw new Error(`Unknown options.force, ${options.force}`);
+          }
+        }
+      }
+
+      appSettings.recording = isOn;
+      updateAppSettings(appSettings);
+      WIDGETS.recorder.reload();
+      return Promise.resolve(appSettings.recording);
+    },
   };
 
-  recorderWidget.reload();
-};
+  reload();
+}

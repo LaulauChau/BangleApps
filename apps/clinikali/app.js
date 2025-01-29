@@ -1,246 +1,254 @@
-/**
- * @param {string} message
- * @param {"info" | "warn" | "error"} severity
- *
- * @returns {void}
- */
-function logAction(message, severity) {
-  const logFile = require("Storage").open("clinikali.log.txt", "a");
-  const logEntry = `${new Date().toISOString()} [${severity.toUpperCase()}] ${message}\n`;
+Bangle.loadWidgets();
+Bangle.drawWidgets();
 
-  return logFile.write(logEntry);
+// Enable Bluetooth Low Energy
+NRF.wake();
+
+let appSettings;
+
+function logAction(message) {
+  const logFile = "clinikali.log.txt";
+  const timestamp = new Date().toISOString();
+  const logEntry = `[${timestamp}] ${message}\n`;
+
+  // Append to log file
+  const file = require("Storage").open(logFile, "a");
+  file.write(logEntry);
 }
 
-/**
- * @returns {{ [key: string]: unknown }}
- */
-function getAppSettings() {
-  /** @type {{ [key: string]: unknown }} */
-  const appSettingsFile =
-    require("Storage").readJSON("clinikali.json", 1) || {};
+function loadAppSettings() {
+  appSettings = require("Storage").readJSON("clinikali.json", 1) || {};
+  let settingsChanged = false;
 
-  return Object.assign(
-    {},
-    {
-      period: 1,
-      pid: "05",
-      record: ["accel", "baro", "hrm"],
-      recording: false,
-    },
-    appSettingsFile,
-  );
-}
-
-/**
- * @param {{ [key: string]: unknown }} newSettings
- *
- * @returns {void}
- */
-function setAppSettings(newSettings) {
-  const appSettings = getAppSettings();
-  const updatedSettings = Object.assign({}, appSettings, newSettings);
-
-  require("Storage").writeJSON("clinikali.json", updatedSettings);
-  logAction("Settings updated", "info");
-}
-
-/**
- * @param {string} sensorName
- *
- * @returns {void}
- */
-function toggleSensorRecording(sensorName) {
-  const appSettings = getAppSettings();
-  /** @type {string[]} */
-  const record = appSettings.record;
-  const sensorIndex = record.indexOf(sensorName);
-
-  if (sensorIndex === -1) {
-    record.push(sensorName);
-    logAction(`Sensor ${sensorName} enabled`, "info");
-  } else {
-    record.splice(sensorIndex, 1);
-    logAction(`Sensor ${sensorName} disabled`, "info");
+  // Initialize PID if not set
+  if (!appSettings.pid) {
+    settingsChanged = true;
+    appSettings.pid = "05"; // Default PID
   }
 
-  setAppSettings({ record });
+  // Initialize record array if not set
+  if (!appSettings.record) {
+    settingsChanged = true;
+    appSettings.record = ["accel", "hrm", "baro"];
+  }
+
+  // Initialize period if not set
+  if (!appSettings.period) {
+    settingsChanged = true;
+    appSettings.period = 1;
+  }
+
+  // Initialize recording status if not set
+  if (typeof appSettings.recording === "undefined") {
+    settingsChanged = true;
+    appSettings.recording = false;
+  }
+
+  if (settingsChanged) {
+    require("Storage").writeJSON("clinikali.json", appSettings);
+  }
+  return appSettings;
 }
 
-/**
- * @returns {void}
- */
-function showSensorMenu() {
-  const appSettings = getAppSettings();
-  const record = appSettings.record;
+loadAppSettings();
 
-  const menu = {
-    "": { title: /*LANG*/ "Sensors" },
-    /*LANG*/ Accelerometer: {
-      onchange: () => toggleSensorRecording("accel"),
-      value: record.includes("accel"),
-    },
-    /*LANG*/ "Heart Rate": {
-      onchange: () => toggleSensorRecording("hrm"),
-      value: record.includes("hrm"),
-    },
+function updateAppSettings() {
+  require("Storage").writeJSON("clinikali.json", appSettings);
+
+  if (WIDGETS.recorder) {
+    WIDGETS.recorder.reload();
+  }
+}
+
+function generateFilename() {
+  const date = new Date();
+  const dateStr = date.toISOString().slice(0, 10); // Gets YYYY-MM-DD
+  const baseFilename = `${appSettings.pid}_${dateStr}`;
+
+  // Check existing files with same base name
+  const files = require("Storage").list(
+    new RegExp(`^${baseFilename}_[a-z]\\.csv$`),
+  );
+
+  if (files.length === 0) {
+    return `${baseFilename}_a.csv`;
+  }
+
+  // Find the last letter used
+  const lastFile = files.sort().pop();
+  const lastLetter = lastFile.charAt(lastFile.length - 5);
+  const nextLetter = String.fromCharCode(lastLetter.charCodeAt(0) + 1);
+
+  return `${baseFilename}_${nextLetter}.csv`;
+}
+
+function extractFileNumber(filename) {
+  if (!filename) {
+    return "";
+  }
+
+  const parts = filename.split("_");
+
+  if (parts.length >= 3) {
+    return `${parts[0]} ${parts[1]} ${parts[2].charAt(0)}`; // Returns "PID DATE LETTER"
+  }
+
+  return filename;
+}
+
+function toggleRecorder(name) {
+  // No need to load settings again as we already have them in appSettings
+  const index = appSettings.record.indexOf(name);
+
+  if (index === -1) {
+    // Add recorder
+    appSettings.record.push(name);
+    logAction(`Sensor ${name} enabled`);
+  } else {
+    // Remove recorder
+    appSettings.record.splice(index, 1);
+    logAction(`Sensor ${name} disabled`);
+  }
+
+  updateAppSettings();
+  showSensorMenu();
+}
+
+function showSensorMenu() {
+  const appSettings = loadAppSettings();
+  if (!appSettings.record) {
+    appSettings.record = ["accel", "hrm", "baro"];
+    updateAppSettings(appSettings);
+  }
+
+  const sensorMenu = {
+    "": { title: "Sensors" },
+  };
+
+  // Add checkbox menu items for each sensor
+  sensorMenu["Accelerometer"] = {
+    value: appSettings.record.includes("accel"),
+    onchange: () => toggleRecorder("accel"),
+  };
+
+  sensorMenu["Heart Rate"] = {
+    value: appSettings.record.includes("hrm"),
+    onchange: () => toggleRecorder("hrm"),
   };
 
   if (Bangle.getPressure) {
-    menu[/*LANG*/ "Temperature"] = {
-      onchange: () => toggleSensorRecording("baro"),
-      value: record.includes("baro"),
+    sensorMenu["Temperature"] = {
+      value: appSettings.record.includes("baro"),
+      onchange: () => toggleRecorder("baro"),
     };
   }
 
-  menu[/*LANG*/ "< Back"] = () => showMainMenu();
-
-  return E.showMenu(menu);
-}
-
-/**
- * @returns {void}
- */
-function showFilesMenu() {
-  const menu = {
-    "": { title: /*LANG*/ "Files" },
+  sensorMenu["< Back"] = () => {
+    showMainMenu();
   };
 
-  /** @type {string[]} */
-  const fileList = require("Storage")
-    .list(/\d+_\d+-\d+-\d+\.csv/, { sf: true })
-    .reverse();
-
-  if (fileList.length === 0) {
-    menu[/*LANG*/ "No files found"] = () => {};
-  } else {
-    for (const file of fileList) {
-      menu[file.match(/\d+-\d+-\d+/)[0]] = () => showFileMenu(file);
-    }
-  }
-
-  menu[/*LANG*/ "< Back"] = () => showMainMenu();
-
-  return E.showMenu(menu);
+  return E.showMenu(sensorMenu);
 }
 
-/**
- * @param {string} fileName
- *
- * @returns {void}
- */
-function deleteFile(fileName) {
-  return E.showPrompt(/*LANG*/ "Delete file?").then((shouldDelete) => {
-    if (!shouldDelete) {
-      return showFileMenu(fileName);
-    }
+function showMainMenu() {
+  const mainMenu = {
+    "": { title: "Clinikali" },
+    "< Back": () => {
+      load();
+    },
+    Record: {
+      value: !!appSettings.recording,
+      onchange: (newValue) => {
+        setTimeout(() => {
+          E.showMenu();
 
-    require("Storage").open(fileName, "r").erase();
-    logAction(`File ${fileName} deleted`, "warn");
+          if (newValue) {
+            // Generate new filename when starting recording
+            const newFilename = generateFilename();
+            appSettings.file = newFilename;
+            updateAppSettings();
+            logAction(`Created new file: ${newFilename}`);
+            // You'll need to pass this filename to your recorder widget
+          }
 
-    return showFilesMenu();
+          WIDGETS.recorder.setRecording(newValue).then(() => {
+            loadAppSettings();
+            logAction(`Recording ${newValue ? "started" : "stopped"}`);
+            showMainMenu();
+          });
+        }, 1);
+      },
+    },
+    "View Files": () => {
+      viewFiles();
+    },
+    Sensors: () => {
+      showSensorMenu();
+    },
+    "Time Period": {
+      value: appSettings.period || 1,
+      min: 1,
+      max: 120,
+      step: 1,
+      format: (value) => `${value} Hz`,
+      onchange: (newValue) => {
+        appSettings.recording = false; // stop recording if we change anything
+        appSettings.period = newValue;
+        logAction(`Sampling period changed to ${newValue}Hz`);
+        updateAppSettings();
+      },
+    },
+  };
+
+  return E.showMenu(mainMenu);
+}
+
+function viewFile(filename) {
+  E.showMenu({
+    "": { title: `File ${extractFileNumber(filename)}` },
+    Delete: () => {
+      E.showPrompt("Delete File?").then((shouldDelete) => {
+        if (shouldDelete) {
+          require("Storage").erase(filename);
+          logAction(`Deleted file: ${filename}`);
+          viewFiles();
+        } else {
+          viewFile(filename);
+        }
+      });
+    },
+    "< Back": () => {
+      viewFiles();
+    },
   });
 }
 
-/**
- * @param {string} fileName
- *
- * @returns {void}
- */
-function sendCsvFile(fileName) {
-  const fileContent = require("Storage").read(fileName);
+function viewFiles() {
+  const fileMenu = {
+    "": { title: "Files" },
+  };
 
-  if (!fileContent) {
-    return logAction(`File ${fileName} not found`, "error");
+  let filesFound = false;
+
+  require("Storage")
+    .list(/^P\d{3}_\d{4}-\d{2}-\d{2}_[a-z]\.csv$/, { sf: true }) // Changed pattern
+    .reverse()
+    .forEach((filename) => {
+      filesFound = true;
+      fileMenu[extractFileNumber(filename)] = () => {
+        viewFile(filename);
+      };
+    });
+
+  if (!filesFound) {
+    fileMenu["No Files found"] = () => {};
   }
 
-  const { macAddress } = getAppSettings();
-
-  NRF.connect(macAddress)
-    .then(() => {
-      logAction(`Connected to ${macAddress}`, "info");
-
-      Bluetooth.println(
-        JSON.stringify({
-          c: fileContent,
-          n: fileName,
-          t: "file",
-          timestamp: Date.now(),
-        }),
-      );
-
-      logAction(`Sent file ${fileName}`, "info");
-
-      E.showMessage("File sent");
-
-      setTimeout(() => showFilesMenu(), 1000);
-    })
-    .catch(() => {
-      logAction(`Failed to connect to ${macAddress}`, "error");
-
-      const now = new Date().getHours();
-
-      if (now >= 0 && now < 1) {
-        setTimeout(() => sendCsvFile(fileName), 60000 * 5);
-      } else {
-        E.showMessage("Failed to connect");
-
-        setTimeout(() => showFilesMenu(), 1000);
-      }
-    });
-}
-
-/**
- * @param {string} fileName
- *
- * @returns {void}
- */
-function showFileMenu(fileName) {
-  const menu = {
-    "": { title: fileName },
-    Delete: () => deleteFile(fileName),
-    Send: () => sendCsvFile(fileName),
+  fileMenu["< Back"] = () => {
+    showMainMenu();
   };
 
-  menu[/*LANG*/ "< Back"] = () => showFilesMenu();
-
-  return E.showMenu(menu);
-}
-
-/**
- * @returns {void}
- */
-function showMainMenu() {
-  const menu = {
-    "": { title: "Clinikali" },
-    /*LANG*/ "< Back": () => load(),
-    /*LANG*/ Record: {
-      onchange: (shouldRecord) => {
-        WIDGETS.clinikali.setRecording(shouldRecord).then(() => {
-          logAction(
-            `Recording ${shouldRecord ? "enabled" : "disabled"}`,
-            "info",
-          );
-          showMainMenu();
-        });
-      },
-      value: !!getAppSettings().recording,
-    },
-    /*LANG*/ "View files": () => showFilesMenu(),
-    /*LANG*/ Sensors: () => showSensorMenu(),
-    /*LANG*/ "Time period": {
-      format: (value) => `${value} Hz`,
-      max: 60,
-      min: 1,
-      onchange: (period) => {
-        logAction(`Period set to ${period} Hz`);
-        setAppSettings({ period, recording: false });
-      },
-      step: 1,
-      value: getAppSettings().period,
-    },
-  };
-
-  return E.showMenu(menu);
+  return E.showMenu(fileMenu);
 }
 
 showMainMenu();
