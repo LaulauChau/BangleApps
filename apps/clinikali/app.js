@@ -4,7 +4,7 @@
  *
  * @returns {void}
  */
-function logAction(message, severity = "info") {
+function logAction(message, severity) {
   const logFile = require("Storage").open("clinikali.log.txt", "a");
   const logEntry = `${new Date().toISOString()} [${severity.toUpperCase()}] ${message}\n`;
 
@@ -41,7 +41,7 @@ function setAppSettings(newSettings) {
   const updatedSettings = Object.assign({}, appSettings, newSettings);
 
   require("Storage").writeJSON("clinikali.json", updatedSettings);
-  logAction("Settings updated");
+  logAction("Settings updated", "info");
 }
 
 /**
@@ -57,10 +57,10 @@ function toggleSensorRecording(sensorName) {
 
   if (sensorIndex === -1) {
     record.push(sensorName);
-    logAction(`Sensor ${sensorName} enabled`);
+    logAction(`Sensor ${sensorName} enabled`, "info");
   } else {
     record.splice(sensorIndex, 1);
-    logAction(`Sensor ${sensorName} disabled`);
+    logAction(`Sensor ${sensorName} disabled`, "info");
   }
 
   setAppSettings({ record });
@@ -157,7 +157,7 @@ function sendCsvFile(fileName) {
 
   NRF.connect(macAddress)
     .then(() => {
-      logAction(`Connected to ${macAddress}`);
+      logAction(`Connected to ${macAddress}`, "info");
 
       Bluetooth.println(
         JSON.stringify({
@@ -168,7 +168,7 @@ function sendCsvFile(fileName) {
         }),
       );
 
-      logAction(`Sent file ${fileName}`);
+      logAction(`Sent file ${fileName}`, "info");
 
       E.showMessage("File sent");
 
@@ -216,7 +216,10 @@ function showMainMenu() {
     /*LANG*/ Record: {
       onchange: (shouldRecord) => {
         WIDGETS.clinikali.setRecording(shouldRecord).then(() => {
-          logAction(`Recording ${shouldRecord ? "enabled" : "disabled"}`);
+          logAction(
+            `Recording ${shouldRecord ? "enabled" : "disabled"}`,
+            "info",
+          );
           showMainMenu();
         });
       },
