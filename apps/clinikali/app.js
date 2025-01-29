@@ -164,9 +164,9 @@ function showMainMenu() {
 }
 
 function sendCsvFile(filename) {
-  const fileContent = require("Storage").read(filename);
+  const fileBytes = require("Storage").open(filename, "r").getLength();
 
-  if (fileContent === undefined) {
+  if (fileBytes === 0) {
     logAction(`File not found: ${filename}`);
 
     return viewFiles();
@@ -175,6 +175,10 @@ function sendCsvFile(filename) {
   NRF.connect(appSettings.macAddress)
     .then(() => {
       logAction(`Connected to ${appSettings.macAddress}`);
+
+      const fileContent = require("Storage")
+        .open(filename, "r")
+        .read(fileBytes);
 
       Bluetooth.println(
         JSON.stringify({
