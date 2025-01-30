@@ -68,8 +68,8 @@ function updateAppSettings(settings) {
   );
   logMessage("[updateAppSettings] Settings updated", "info");
 
-  if (WIDGETS["recorder"]) {
-    WIDGETS["recorder"].reload();
+  if (WIDGETS["clinikali"]) {
+    WIDGETS["clinikali"].reload();
   }
 }
 
@@ -87,6 +87,28 @@ function handleTimePeriodChange(newTimePeriod) {
 }
 
 /**
+ * @returns {string}
+ */
+function getCsvHeaders() {
+  const enabledSensors = getAppSettings()["enabledSensors"];
+  const headers = ["Time"];
+
+  if (enabledSensors.includes("accel")) {
+    headers.push("Accel X", "Accel Y", "Accel Z");
+  }
+
+  if (enabledSensors.includes("hrm")) {
+    headers.push("Heartrate");
+  }
+
+  if (enabledSensors.includes("baro")) {
+    headers.push("Temperature");
+  }
+
+  return headers.join(",");
+}
+
+/**
  * @returns {void}
  */
 function toggleRecorder() {
@@ -98,8 +120,8 @@ function toggleRecorder() {
     "info",
   );
 
-  if (WIDGETS["recorder"]) {
-    WIDGETS["recorder"].setRecording(!isRecording);
+  if (WIDGETS["clinikali"]) {
+    WIDGETS["clinikali"].setRecording(!isRecording);
   }
 
   if (isRecording) {
@@ -114,11 +136,15 @@ function toggleRecorder() {
   if (fileExist.length === 0 || fileExist[0] === undefined) {
     fileName = `${getAppSettings()["pid"]}_${currentDate}.csv`;
     logMessage(`[toggleRecorder] File created: ${fileName}`, "info");
-    require("Storage").open(fileName, "a").write("foo");
+    require("Storage")
+      .open(fileName, "a")
+      .write(getCsvHeaders() + "\n");
   } else {
     fileName = fileExist[0];
     logMessage(`[toggleRecorder] Append to file: ${fileName}`, "info");
   }
+
+  console.log(fileName);
 
   updateAppSettings({ file: fileName });
 }
@@ -207,8 +233,14 @@ function showFileMenu(fileName) {
           return showFileMenu(fileName);
         }
 
+        const file = getAppSettings()["file"];
+
+        if (file === fileName) {
+          updateAppSettings({ file: "" });
+        }
+
         updateAppSettings({ isRecording: false });
-        require("Storage").erase(fileName);
+        require("Storage").open(fileName, "r").erase();
         logMessage(`[showFileMenu] File ${fileName} deleted`, "info");
 
         return showFilesMenu();
@@ -239,9 +271,10 @@ function showFilesMenu() {
   if (fileList.length === 0) {
     menu["No files found"] = () => {};
   } else {
-    for (const fileName of fileList) {
-      menu[fileName.split("_")[1]] = () => showFileMenu(fileName);
-    }
+    fileList.forEach(
+      (filename) =>
+        (menu[filename.split("_")[1]] = () => showFileMenu(filename)),
+    );
   }
 
   menu["< Back"] = () => showMainMenu();
