@@ -1,8 +1,9 @@
 {
+  "enabledSensors": ["accel", "baro", "hrm"],
+  "file": "",
+  "isRecording": false,
   "localeOffset": 1,
   "macAddress": "E8:F7:91:FB:61:DB",
-  "period": 1,
   "pid": "05",
-  "recording": false,
-  "record": ["accel", "baro", "hrm"]
+  "timePeriod": 1
 }
