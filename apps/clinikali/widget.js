@@ -235,16 +235,85 @@
   }
 
   /**
+   * @param {string} oldFileName
+   *
+   * @returns {Promise<void>}
+   */
+  function sendFileOnDayChange(oldFileName) {
+    return new Promise((resolve, reject) => {
+      const file = require("Storage").open(oldFileName, "r");
+      const fileLength = file.getLength();
+
+      if (fileLength === 0) {
+        logMessage(
+          `[sendFileOnDayChange] File ${oldFileName} not found`,
+          "error",
+        );
+        reject(new Error("File not found"));
+        return;
+      }
+
+      const macAddress = getAppSettings()["macAddress"];
+
+      NRF.connect(macAddress, {})
+        .then(() => {
+          logMessage(
+            `[sendFileOnDayChange] Connected to ${macAddress}`,
+            "info",
+          );
+
+          Bluetooth.println(
+            JSON.stringify({
+              c: file.read(fileLength),
+              n: oldFileName,
+              t: "file",
+              timestamp: Date.now(),
+            }),
+          );
+
+          logMessage(
+            `[sendFileOnDayChange] File ${oldFileName} sent to ${macAddress}`,
+            "info",
+          );
+          resolve();
+        })
+        .catch((/** @type {unknown} */ error) => {
+          logMessage(
+            `[sendFileOnDayChange] Failed to connect to ${macAddress}`,
+            "error",
+          );
+
+          // Only retry during midnight hour (0-1)
+          const now = new Date().getHours();
+          if (now >= 0 && now < 1) {
+            setTimeout(() => sendFileOnDayChange(oldFileName), 60000 * 5); // retry in 5 minutes
+          }
+          reject(error);
+        });
+    });
+  }
+
+  /**
    * @param {string[]} data
    *
    * @returns {void}
    */
   function handleDayChange(data) {
+    const oldFileName = getAppSettings()["file"];
+
     if (storageFile) {
       storageFile.write(`${data.join(",")}\n`);
     }
 
-    return createNewFile();
+    // Try to send the file before creating a new one
+    sendFileOnDayChange(oldFileName)
+      .catch((/** @type {unknown} */ error) => {
+        logMessage(`[handleDayChange] Error sending file: ${error}`, "error");
+      })
+      .finally(() => {
+        // Create new file regardless of whether send succeeded
+        createNewFile();
+      });
   }
 
   /**
