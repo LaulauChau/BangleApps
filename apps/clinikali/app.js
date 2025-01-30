@@ -21,7 +21,7 @@ Bangle.drawWidgets();
  *
  * @returns {void}
  */
-export function logMessage(message, severity) {
+function logMessage(message, severity) {
   const timestamp = new Date()
     .toISOString()
     .replace("T", " - ")
@@ -37,7 +37,7 @@ export function logMessage(message, severity) {
 /**
  * @returns {AppSettings}
  */
-export function getAppSettings() {
+function getAppSettings() {
   /** @type {AppSettings} */
   const defaultSettings = {
     enabledSensors: ["accel", "baro", "hrm"],
@@ -59,7 +59,7 @@ export function getAppSettings() {
  *
  * @returns {void}
  */
-export function updateAppSettings(settings) {
+function updateAppSettings(settings) {
   const currentSettings = getAppSettings();
 
   require("Storage").writeJSON(
