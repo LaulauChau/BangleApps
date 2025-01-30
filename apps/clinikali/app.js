@@ -108,7 +108,7 @@ function toggleRecorder() {
 
   const currentDate = new Date().toISOString().split("T")[0];
   /** @type {string[]} */
-  const fileExist = require("Storage").list(currentDate);
+  const fileExist = require("Storage").list(currentDate, { sf: true });
   let fileName = "";
 
   if (fileExist.length === 0 || fileExist[0] === undefined) {
@@ -233,7 +233,7 @@ function showFilesMenu() {
   };
 
   const fileList = require("Storage")
-    .list(/\d+_\d+-\d+-\d+\.csv/)
+    .list(/\d+_\d+-\d+-\d+\.csv/, { sf: true })
     .reverse();
 
   if (fileList.length === 0) {
