@@ -67,10 +67,13 @@
 
   /**
    * @param {{ [key: string]: unknown }} settings
+   * @param {boolean} skipReload - Skip calling reload() to prevent infinite loops
    *
    * @returns {void}
    */
-  function updateAppSettings(settings) {
+  function updateAppSettings(settings, skipReload) {
+    if (skipReload === undefined) skipReload = false;
+
     const currentSettings = getAppSettings();
 
     require("Storage").writeJSON(
@@ -82,7 +85,9 @@
       "info",
     );
 
-    reload();
+    if (!skipReload) {
+      reload();
+    }
   }
 
   /**
@@ -232,7 +237,7 @@
     const newFile = require("Storage").open(newFilename, "a");
     storageFile = newFile;
     logMessage(`[createNewFile] Created new file: ${newFilename}`, "info");
-    updateAppSettings({ file: newFilename });
+    updateAppSettings({ file: newFilename }, true); // Skip reload to prevent infinite loop
 
     newFile.write(`${csvHeaders}\n`);
   }
@@ -429,7 +434,7 @@
     const filename = `${appSettings.pid}_${currentDate}.csv`;
 
     if (!appSettings.file?.startsWith(`${appSettings.pid}_${currentDate}`)) {
-      updateAppSettings({ file: filename });
+      updateAppSettings({ file: filename }, true); // Skip reload to prevent infinite loop
 
       if (
         require("Storage").list(new RegExp(filename), { sf: true }).length > 0
