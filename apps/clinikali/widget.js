@@ -77,7 +77,10 @@
       "clinikali.json",
       Object.assign(currentSettings, settings),
     );
-    logMessage("[updateAppSettings] Settings updated", "info");
+    logMessage(
+      `[updateAppSettings] Settings updated: ${JSON.stringify(settings)}`,
+      "info",
+    );
 
     reload();
   }
@@ -239,94 +242,94 @@
    *
    * @returns {Promise<void>}
    */
-  function sendFileOnDayChange(oldFileName) {
-    return new Promise((resolve, reject) => {
-      const file = require("Storage").open(oldFileName, "r");
-      const fileLength = file.getLength();
+  // function sendFileOnDayChange(oldFileName) {
+  //   return new Promise((resolve, reject) => {
+  //     const file = require("Storage").open(oldFileName, "r");
+  //     const fileLength = file.getLength();
 
-      if (fileLength === 0) {
-        logMessage(
-          `[sendFileOnDayChange] File ${oldFileName} not found`,
-          "error",
-        );
-        reject(new Error("File not found"));
-        return;
-      }
+  //     if (fileLength === 0) {
+  //       logMessage(
+  //         `[sendFileOnDayChange] File ${oldFileName} not found`,
+  //         "error",
+  //       );
+  //       reject(new Error("File not found"));
+  //       return;
+  //     }
 
-      const macAddress = getAppSettings()["macAddress"];
+  //     const macAddress = getAppSettings()["macAddress"];
 
-      NRF.connect(macAddress, {})
-        .then(() => {
-          logMessage(
-            `[sendFileOnDayChange] Connected to ${macAddress}`,
-            "info",
-          );
+  //     NRF.connect(macAddress, {})
+  //       .then(() => {
+  //         logMessage(
+  //           `[sendFileOnDayChange] Connected to ${macAddress}`,
+  //           "info",
+  //         );
 
-          Bluetooth.println(
-            JSON.stringify({
-              c: file.read(fileLength),
-              n: oldFileName,
-              t: "file",
-              timestamp: Date.now(),
-            }),
-          );
+  //         Bluetooth.println(
+  //           JSON.stringify({
+  //             c: file.read(fileLength),
+  //             n: oldFileName,
+  //             t: "file",
+  //             timestamp: Date.now(),
+  //           }),
+  //         );
 
-          logMessage(
-            `[sendFileOnDayChange] File ${oldFileName} sent to ${macAddress}`,
-            "info",
-          );
-          resolve();
-        })
-        .catch((/** @type {unknown} */ error) => {
-          logMessage(
-            `[sendFileOnDayChange] Failed to connect to ${macAddress}`,
-            "error",
-          );
+  //         logMessage(
+  //           `[sendFileOnDayChange] File ${oldFileName} sent to ${macAddress}`,
+  //           "info",
+  //         );
+  //         resolve();
+  //       })
+  //       .catch((/** @type {unknown} */ error) => {
+  //         logMessage(
+  //           `[sendFileOnDayChange] Failed to connect to ${macAddress}`,
+  //           "error",
+  //         );
 
-          // Only retry during midnight hour (0-1)
-          const now = new Date().getHours();
-          if (now >= 0 && now < 1) {
-            setTimeout(() => sendFileOnDayChange(oldFileName), 60000 * 5); // retry in 5 minutes
-          }
-          reject(error);
-        });
-    });
-  }
+  //         // Only retry during midnight hour (0-1)
+  //         const now = new Date().getHours();
+  //         if (now >= 0 && now < 1) {
+  //           setTimeout(() => sendFileOnDayChange(oldFileName), 60000 * 5); // retry in 5 minutes
+  //         }
+  //         reject(error);
+  //       });
+  //   });
+  // }
 
   /**
    * @param {string[]} data
    *
    * @returns {void}
    */
-  function handleDayChange(data) {
-    const oldFileName = getAppSettings()["file"];
+  // function handleDayChange(data) {
+  //   const oldFileName = getAppSettings()["file"];
 
-    if (storageFile) {
-      storageFile.write(`${data.join(",")}\n`);
-    }
+  //   if (storageFile) {
+  //     storageFile.write(`${data.join(",")}\n`);
+  //   }
 
-    // Try to send the file before creating a new one
-    sendFileOnDayChange(oldFileName)
-      .catch((/** @type {unknown} */ error) => {
-        logMessage(`[handleDayChange] Error sending file: ${error}`, "error");
-      })
-      .finally(() => {
-        // Create new file regardless of whether send succeeded
-        createNewFile();
-      });
-  }
+  //   // Try to send the file before creating a new one
+  //   sendFileOnDayChange(oldFileName)
+  //     .catch((/** @type {unknown} */ error) => {
+  //       logMessage(`[handleDayChange] Error sending file: ${error}`, "error");
+  //     })
+  //     .finally(() => {
+  //       // Create new file regardless of whether send succeeded
+  //       createNewFile();
+  //     });
+  // }
 
   /**
    * @returns {void}
    */
   function writeData() {
-    const appSettings = getAppSettings();
+    // const appSettings = getAppSettings();
     const utcTime = new Date();
-    const localTime = new Date(
-      utcTime.getTime() + appSettings.localeOffset * 60 * 60 * 1000,
-    );
+    // const localTime = new Date(
+    //   utcTime.getTime() + appSettings.localeOffset * 60 * 60 * 1000,
+    // );
 
-    const currentDate = localTime.toISOString().split("T")[0];
+    // const currentDate = localTime.toISOString().split("T")[0];
     const fields = [utcTime.toISOString().replace("T", " ").replace("Z", "")];
 
     const recorders =
@@ -336,9 +339,13 @@
     );
 
     try {
-      if (appSettings.file && !appSettings.file.includes(currentDate)) {
-        handleDayChange(fields);
-      } else if (storageFile) {
+      // if (appSettings.file && !appSettings.file.includes(currentDate)) {
+      //   handleDayChange(fields);
+      // } else if (storageFile) {
+      //   storageFile.write(`${fields.join(",")}\n`);
+      // }
+
+      if (storageFile) {
         storageFile.write(`${fields.join(",")}\n`);
       }
     } catch (error) {

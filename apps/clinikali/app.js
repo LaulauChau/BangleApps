@@ -66,7 +66,10 @@ function updateAppSettings(settings) {
     "clinikali.json",
     Object.assign(currentSettings, settings),
   );
-  logMessage("[updateAppSettings] Settings updated", "info");
+  logMessage(
+    `[updateAppSettings] Settings updated: ${JSON.stringify(settings)}`,
+    "info",
+  );
 
   if (WIDGETS["clinikali"]) {
     WIDGETS["clinikali"].reload();
@@ -178,45 +181,45 @@ function toggleSensor(sensorName) {
  *
  * @returns {MenuInstance}
  */
-function sendCsvFile(fileName) {
-  const file = require("Storage").open(fileName, "r");
-  const fileLength = file.getLength();
+// function sendCsvFile(fileName) {
+//   const file = require("Storage").open(fileName, "r");
+//   const fileLength = file.getLength();
 
-  if (fileLength === 0) {
-    logMessage(`[showFileMenu] File ${fileName} not found`, "error");
+//   if (fileLength === 0) {
+//     logMessage(`[showFileMenu] File ${fileName} not found`, "error");
 
-    return showFilesMenu();
-  }
+//     return showFilesMenu();
+//   }
 
-  const macAddress = getAppSettings()["macAddress"];
+//   const macAddress = getAppSettings()["macAddress"];
 
-  NRF.connect(macAddress, {})
-    .then(() => {
-      logMessage(`[showFileMenu] Connected to ${macAddress}`, "info");
+//   NRF.connect(macAddress, {})
+//     .then(() => {
+//       logMessage(`[showFileMenu] Connected to ${macAddress}`, "info");
 
-      Bluetooth.println(
-        JSON.stringify({
-          c: file.read(fileLength),
-          n: fileName,
-          t: "file",
-          timestamp: Date.now(),
-        }),
-      );
+//       Bluetooth.println(
+//         JSON.stringify({
+//           c: file.read(fileLength),
+//           n: fileName,
+//           t: "file",
+//           timestamp: Date.now(),
+//         }),
+//       );
 
-      logMessage(`[showFileMenu] File send to ${macAddress}`, "info");
-    })
-    .catch(() => {
-      logMessage(`[showFileMenu] Fail to connect to ${macAddress}`, "error");
+//       logMessage(`[showFileMenu] File send to ${macAddress}`, "info");
+//     })
+//     .catch(() => {
+//       logMessage(`[showFileMenu] Fail to connect to ${macAddress}`, "error");
 
-      const now = new Date().getHours();
+//       const now = new Date().getHours();
 
-      if (now >= 0 && now < 1) {
-        setTimeout(() => sendCsvFile(fileName), 60000 * 5);
-      }
-    });
+//       if (now >= 0 && now < 1) {
+//         setTimeout(() => sendCsvFile(fileName), 60000 * 5);
+//       }
+//     });
 
-  return showFilesMenu();
-}
+//   return showFilesMenu();
+// }
 
 /**
  * @param {string} fileName
@@ -246,9 +249,9 @@ function showFileMenu(fileName) {
         return showFilesMenu();
       });
     },
-    Send: () => {
-      sendCsvFile(fileName);
-    },
+    // Send: () => {
+    //   sendCsvFile(fileName);
+    // },
     "< Back": () => showFilesMenu(),
   };
 
